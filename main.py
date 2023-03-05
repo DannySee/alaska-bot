@@ -1,4 +1,11 @@
 import session_manager as bz
+import data_pull as query
+
+
+# load list of alaska deviations
+query.upload_alaska_deviations
+
+
 
 session = bz.connect()
 bz.quick_access_va(session)

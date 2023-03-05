@@ -1,10 +1,12 @@
 import pyodbc
 
+# sql server connection properties
 sql_server = pyodbc.connect(
     driver='{SQL Server}',
     server='MS248CSSQL01.SYSCO.NET',
     database='Pricing_Agreements')
 
+# dictionary of all opsites 3 (key=3 digit number, value=3 digit number + name)
 site_names = {
     '001': '001 - Jackson',
     '002': '002 - Atlanta',
@@ -83,21 +85,26 @@ site_names = {
     '450': '450 - Alaska (NO DPM)'
 }
 
+# list of all north market sites (3 digit numbers)
 north_market = ['007', '008', '009', '011', '012', '015', '018', '019', '024', '025', '027', '035', '038', '039', '047',
                 '051', '054',
                 '056', '058', '064', '068', '075', '076', '194', '195', '306', '332']
 
+# list of all south market sites (3 digit numbers)
 south_market = ['001', '002', '003', '006', '010', '013', '014', '016', '022', '023', '026', '029', '032', '037', '046',
                 '048', '060',
                 '067', '073', '078', '137', '163', '164', '288', '293', '429']
 
+# list of all west market sites (3 digit numbers)
 west_market = ['004', '005', '017', '031', '036', '040', '043', '045', '049', '050', '052', '055', '057', '059', '061',
                '066', '101',
                '102', '320', '450']
 
+# list of all sites using the keys of all sites dictionary
 all_sites = site_names.keys()
 
 
+# function to establish connection to sus and return sus object
 def sus(site):
     cnn_sus = pyodbc.connect(
         driver='{iSeries Access ODBC Driver}',
