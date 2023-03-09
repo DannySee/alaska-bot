@@ -6,6 +6,7 @@ import pythoncom
 def bypassWarning(bzo):
     while checkScreen(bzo, 'Systems', 1) == False:
         bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
 
     
 def checkScreen(bzo, screen, row):
@@ -19,7 +20,7 @@ def checkScreen(bzo, screen, row):
 
 
 def disconnect(bzo):
-    bzo.CloseSession(1,1)
+    bzo.CloseSession(1,26)
 
 
 def connect():
@@ -51,6 +52,7 @@ def quick_access_va(bzo):
     screen = "Vendor Agreement Maintenance"
 
     if checkScreen(bzo, screen, 1) == False:
+        bzo.WaitReady(10,1)
         bzo.SendKey("<PF10>")
         bzo.WaitReady(10,1)
         bzo.SendKey("VA")
@@ -61,25 +63,52 @@ def quick_access_va(bzo):
             time.sleep(0.3)
 
 
-def create_va(bzo, type, vendor):
-    mainScreen = "Vendor Agreement Maintenance"
-    subScreen = "Agreement Header"
+def quick_access_ca(bzo):
+    screen = "Customer Agreement Maintenance"
 
-    if checkScreen(bzo, mainScreen, 1) == True:
+    if checkScreen(bzo, screen, 1) == False:
+        bzo.SendKey("<PF10>")
+        bzo.WaitReady(10,1)
+        bzo.SendKey("CA")
+        bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
+
+        while checkScreen(bzo, screen, 1) == False:
+            time.sleep(0.3)
+
+
+def create_va(bzo, type, vendor):
+    startScreen = "Vendor Agreement Maintenance"
+    errScreen = "VA Default Address required for Vendor Hierarchy."
+    endScreen = "Agreement Header"
+
+    if checkScreen(bzo, startScreen, 1) == True:
         vendor = (f'          {vendor}')[-10:]
         bzo.WriteScreen(type, 10, 45)
         bzo.WriteScreen(vendor, 12, 45)
         bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
         bzo.SendKey("<PF6>")
+        bzo.WaitReady(10,1)
 
-        while checkScreen(bzo, subScreen, 2) == False:
-            time.sleep(0.3)
+        if checkScreen(bzo, errScreen, 24) == True:
+            va = 'VA10023'
+            bzo.SendKey("<PF15>")
+            bzo.WaitReady(10,1)
+        else:
+            while checkScreen(bzo, endScreen, 2) == False:
+                time.sleep(0.3)
 
+            va = ''
+            va = bzo.ReadScreen(va, 9, 4, 16)[1]
+
+        return va
+        
 
 def va_general_agreement_information(bzo, description, pastDueDeduct, costBasis, caType, rebateType, start, end):
     startScreen = 'General Agreement Information'
     endScreen = 'Billing Information'
-    retroWarning = 'Warning: Changes will trigger retro processing.'
+    warningScreen = 'Warning: Changes will trigger retro processing.'
 
     if checkScreen(bzo, startScreen, 7) == True:
         if len(description) > 30: description = description[-30:]
@@ -97,18 +126,23 @@ def va_general_agreement_information(bzo, description, pastDueDeduct, costBasis,
             bzo.WriteScreen(rebateType, 17, 51)
         bzo.WriteScreen(start, 19, 51)
         bzo.WriteScreen(end, 20, 51)
+
         bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
 
         while checkScreen(bzo, endScreen, 8) == False:
             time.sleep(0.3)
-            if checkScreen(bzo, retroWarning, 24): bzo.SendKey("<Enter>")
+            if checkScreen(bzo, warningScreen, 24): 
+                bzo.SendKey("<Enter>")
+                bzo.WaitReady(10,1)
 
 
 def va_billing_information(bzo, billingFreq1, billingFreq2, billBackFormat, preApproval, corporateClaimed, appropName):
     startScreen = 'Billing Information'
+    warningScreen = 'Warning: Changes will trigger retro processing.'
     nextScreen = 'Agreement Address/Codes'
     endScreen = 'Item Eligibility'
-    retroWarning = 'Warning: Changes will trigger retro processing.'
+    
 
     if checkScreen(bzo, startScreen, 8) == True:
         billingFreq2 = (f'  {billingFreq2}')[-2:]
@@ -120,16 +154,165 @@ def va_billing_information(bzo, billingFreq1, billingFreq2, billBackFormat, preA
         bzo.WriteScreen(corporateClaimed, 14, 27)
         bzo.WriteScreen(appropName, 20, 27)
         bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
         
         while checkScreen(bzo, nextScreen, 2) == False:
             time.sleep(0.3)
-            if checkScreen(bzo, retroWarning, 24): bzo.SendKey("<Enter>")
+            if checkScreen(bzo, warningScreen, 24): 
+                bzo.SendKey("<Enter>")
+                bzo.WaitReady(10,1)
 
         bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
 
         while checkScreen(bzo, endScreen, 2) == False:
             time.sleep(0.3)
 
 
-def va_item_eligibility(bzo, iea, specCode, spec, rebateBasis, rebateAmount, approprAmount, start, end):
-    print('Doh')
+def va_item_eligibility(bzo, items):
+    startScreen = 'Item Eligibility'
+    warningScreen = 'Item does not belong to the vendor specified on the vendor agreement.'
+    endScreen = 'Customer Eligibility'
+
+    if checkScreen(bzo, startScreen, 2) == True:
+
+        row = 13
+        for item in items:
+            bzo.WriteScreen('A', row, 4)
+            bzo.WriteScreen('SUPC', row, 6)
+            bzo.WriteScreen(item.ITEM, row, 15)
+            bzo.WriteScreen(item.VA_REBATE_BASIS, row, 36)
+            bzo.WriteScreen(item.VA_ALASKA_AMT, row, 42)
+            bzo.WriteScreen(item.VA_APPROP_AMT, row, 55)
+
+            if row == 20: 
+                bzo.SendKey("@v")
+                bzo.WaitReady(10,1)
+                row = 13 
+            else:
+                row += 1 
+
+        bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
+
+        while checkScreen(bzo, endScreen, 2) == False:
+            time.sleep(0.3)
+            if checkScreen(bzo, warningScreen, 24): 
+                bzo.SendKey("<Enter>")
+                bzo.WaitReady(10,1)
+
+
+def va_customer_eligibility(bzo, customers):
+    startScreen = 'Customer Eligibility'
+    nextScreen = 'Agreement Overrides'
+    endScreen = nextScreen if customers[0].CA == '0' else 'Customer Agreement Item Eligibility (Allowance)'
+
+    if checkScreen(bzo, startScreen, 2) == True:
+        
+        if 'VA' in customers[0].ELIGIBILITY_TYPE:  
+
+            row = 13
+            for customer in customers:
+                bzo.WriteScreen(customer.IEA, row, 8)
+                bzo.WriteScreen(customer.SPEC_CODE, row, 13)
+                bzo.WriteScreen(customer.SPEC, row, 19)
+
+                if row == 20: 
+                    bzo.SendKey("@v")
+                    bzo.WaitReady(10,1)
+                    row = 13 
+                else:
+                    row += 1 
+
+        bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
+
+        while checkScreen(bzo, nextScreen, 2) == False:
+            time.sleep(0.3)
+
+        if nextScreen != endScreen:
+            bzo.SendKey("<Enter>")
+            bzo.WaitReady(10,1)
+            bzo.SendKey("<Enter>")
+            bzo.WaitReady(10,1)            
+
+            while checkScreen(bzo, endScreen, 2) == False:
+                time.sleep(0.3)
+
+
+def ca_item_eligibility(bzo, items):
+    startScreen = 'Customer Agreement Item Eligibility (Allowance)'
+    endScreen = 'Customer Eligibility'
+
+    if checkScreen(bzo, startScreen, 2) == True:
+
+        row = 12
+        for item in items:
+            bzo.WriteScreen(item.CA_REBATE_BASIS, row, 33)
+            bzo.WriteScreen('         ', row, 36)
+            bzo.WriteScreen(item.CA_ALLOWANCE, row, 36)
+            bzo.WriteScreen('        ', row, 48)
+            bzo.WriteScreen(item.CA_COMM_BASE, row, 48)
+            bzo.WriteScreen('        ', row, 57)
+            bzo.WriteScreen(item.CA_ALASKA_ADJ_AP, row, 57)
+
+            if row == 20: 
+                bzo.SendKey("@v")
+                bzo.WaitReady(10,1)
+                row = 13 
+            else:
+                row += 1 
+
+        bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
+
+        while checkScreen(bzo, endScreen, 2) == False:
+            time.sleep(0.3)
+
+
+def ca_customer_eligibility(bzo, customers):
+    startScreen = 'Customer Eligibility'
+    endScreen = 'Agreement Overrides'
+    ca = ''
+
+    if checkScreen(bzo, startScreen, 2) == True:
+
+        if 'VA' not in customers[0].ELIGIBILITY_TYPE:  
+            row = 13
+            for customer in customers:
+                bzo.WriteScreen(customer.IEA, row, 9)
+                bzo.WriteScreen(customer.SPEC_CODE, row, 15)
+                bzo.WriteScreen(customer.SPEC, row, 22)
+
+                if row == 20: 
+                    bzo.SendKey("@v")
+                    bzo.WaitReady(10,1)
+                    row = 13  
+                else:
+                    row += 1 
+
+        bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
+
+        while checkScreen(bzo, endScreen, 2) == False:
+            time.sleep(0.3)
+
+        ca = bzo.ReadScreen(ca, 9, 4, 15)[1]
+        
+    if not ca.isnumeric(): ca = '0'
+    
+    return ca
+    
+
+def commit_transaction(bzo):
+    startScreen = 'Agreement Overrides'
+    endScreen = 'Agreement Maintenance'
+    
+    if checkScreen(bzo, startScreen, 2) == True:
+        bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
+        bzo.SendKey("<PF7>")
+        bzo.WaitReady(10,1)
+
+        while checkScreen(bzo, endScreen, 1) == False:
+            time.sleep(0.3)
