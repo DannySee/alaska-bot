@@ -4,7 +4,7 @@ from data_pull import upload_alaska_deviations, deviation_details, new_agreement
 
 
 # load list of alaska deviations 
-#deviations = upload_alaska_deviations()
+# deviations = upload_alaska_deviations()
 deviations =  deviation_details()
 header = deviations['header']
 itemEligibility = deviations['item_eligibility']

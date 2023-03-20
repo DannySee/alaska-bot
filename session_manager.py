@@ -79,8 +79,12 @@ def quick_access_ca(bzo):
 
 def create_va(bzo, type, vendor):
     startScreen = "Vendor Agreement Maintenance"
-    errScreen = "VA Default Address required for Vendor Hierarchy."
     endScreen = "Agreement Header"
+    errScreen = {
+        "VA10023":"VA Default Address required for Vendor Hierarchy.",
+        "VA10024":"Vendor number is invalid. Press F4 for a list."
+    }
+
 
     if checkScreen(bzo, startScreen, 1) == True:
         vendor = (f'          {vendor}')[-10:]
@@ -91,15 +95,17 @@ def create_va(bzo, type, vendor):
         bzo.SendKey("<PF6>")
         bzo.WaitReady(10,1)
 
-        if checkScreen(bzo, errScreen, 24) == True:
-            va = 'VA10023'
-            bzo.SendKey("<PF15>")
-            bzo.WaitReady(10,1)
-        else:
+        va = ''
+        for err in errScreen:
+            if checkScreen(bzo, errScreen[err], 24) == True:
+                va = err
+                bzo.SendKey("<PF15>")
+                bzo.WaitReady(10,1)
+
+        if va == '':
             while checkScreen(bzo, endScreen, 2) == False:
                 time.sleep(0.3)
 
-            va = ''
             va = bzo.ReadScreen(va, 9, 4, 16)[1]
 
         return va
@@ -188,6 +194,7 @@ def va_item_eligibility(bzo, items):
             if row == 20: 
                 bzo.SendKey("@v")
                 bzo.WaitReady(10,1)
+                time.sleep(0.3)
                 row = 13 
             else:
                 row += 1 
@@ -216,10 +223,13 @@ def va_customer_eligibility(bzo, customers):
                 bzo.WriteScreen(customer.IEA, row, 8)
                 bzo.WriteScreen(customer.SPEC_CODE, row, 13)
                 bzo.WriteScreen(customer.SPEC, row, 19)
+                bzo.WriteScreen(f'  {customer.START_DT}', row, 37)
+                bzo.WriteScreen(f'  {customer.END_DT}', row, 48)
 
                 if row == 20: 
                     bzo.SendKey("@v")
                     bzo.WaitReady(10,1)
+                    time.sleep(0.3)
                     row = 13 
                 else:
                     row += 1 
@@ -255,10 +265,11 @@ def ca_item_eligibility(bzo, items):
             bzo.WriteScreen(item.CA_COMM_BASE, row, 48)
             bzo.WriteScreen('        ', row, 57)
             bzo.WriteScreen(item.CA_ALASKA_ADJ_AP, row, 57)
-
+            
             if row == 20: 
                 bzo.SendKey("@v")
                 bzo.WaitReady(10,1)
+                time.sleep(0.3)
                 row = 13 
             else:
                 row += 1 
@@ -283,10 +294,13 @@ def ca_customer_eligibility(bzo, customers):
                 bzo.WriteScreen(customer.IEA, row, 9)
                 bzo.WriteScreen(customer.SPEC_CODE, row, 15)
                 bzo.WriteScreen(customer.SPEC, row, 22)
+                bzo.WriteScreen(f'  {customer.START_DT}', row, 40)
+                bzo.WriteScreen(f'  {customer.END_DT}', row, 50)
 
                 if row == 20: 
                     bzo.SendKey("@v")
                     bzo.WaitReady(10,1)
+                    time.sleep(0.3)
                     row = 13  
                 else:
                     row += 1 
@@ -316,3 +330,4 @@ def commit_transaction(bzo):
 
         while checkScreen(bzo, endScreen, 1) == False:
             time.sleep(0.3)
+

@@ -6,7 +6,7 @@ sql_server = db.sql_server
 
 # define formatted date parameters: yesterday = sus format, today = timestamp format
 today = datetime.now().strftime('%Y-%m-%d')
-yesterday = (datetime.now() - timedelta(7)).strftime('%Y%m%d')
+yesterday = (datetime.now() - timedelta(1)).strftime('%Y%m%d')
 
 
 # function to pull all pricing agreements keyed day prior with customer detail out of 
@@ -36,10 +36,10 @@ def lead_agreements_created_yesterday():
         AND AZCEAI = 'VA ' 
 
         LEFT JOIN SCDBFP10.PMDPDVRF
-        ON M7VAGN = DVCPM9
+        ON CAST(M7VAGN AS VARCHAR(11)) = TRIM(DVCPM9)
         AND TRIM(DVCPTY) = 'VA'
 
-        WHERE M7EADT >= {yesterday}
+        WHERE M7EADT = {yesterday}
         AND M7ACAN = 0
         AND M7PPAF = 'PD'
         AND M7VAGD NOT LIKE '%VOID%' 
@@ -76,10 +76,10 @@ def lead_agreements_created_yesterday():
         AND T1.AZPCSP = T2.AZPCSP
 
         LEFT JOIN SCDBFP10.PMDPDVRF
-        ON M7VAGN = DVCPM9
+        ON CAST(M7VAGN AS VARCHAR(11)) = TRIM(DVCPM9)
         AND TRIM(DVCPTY) = 'VA'
 
-        WHERE M7EADT >= {yesterday}
+        WHERE M7EADT = {yesterday}
         AND M7ACAN <> 0
         AND M7PPAF = 'PD'
         AND M7VAGD NOT LIKE '%VOID%' 
@@ -110,10 +110,10 @@ def lead_agreements_created_yesterday():
         AND AZCEAI = 'CA ' 
 
         LEFT JOIN SCDBFP10.PMDPDVRF
-        ON NHCANO = DVCPM9
+        ON CAST(NHCANO AS VARCHAR(11)) = TRIM(DVCPM9)
         AND TRIM(DVCPTY) = 'CA'
 
-        WHERE NHEADT >= {yesterday}
+        WHERE NHEADT = {yesterday}
         AND NHCVAN = 0
         AND NHPPAF = 'PD'
         AND NHCADC NOT LIKE '%VOID%' 
@@ -148,7 +148,7 @@ def insert_into_sql_server(dataset, table):
             
         # commit insert statement after all chunks have been loaded in the server
         sql_server.commit()
-    else:
+    elif rowCount > 0:
 
         # format dataset, insert into sql server and commit
         rows = ','.join(str(row) for row in dataset)
@@ -177,21 +177,25 @@ def alaska_accounts(dataset):
     
         UNION 
 
-        SELECT DISTINCT 
-        IFNULL(TRIM(T1.JTTPAR), TRIM(T2.JTTPAR)) AS SPEC 
-        FROM SCDBFP10.USCBJOPF 
-        LEFT JOIN SCDBFP10.USCKJTPF AS T1 
-        ON JOCUNO = T1.JTFPAR 
-        AND T1.JTFTYP NOT IN ('PRNT', 'MSTR') 
-        AND T1.JTTTYP IN ('PRNT', 'MSTR') 
-        AND T1.JTTEDT >= {today} 
-        LEFT JOIN SCDBFP10.USCKJTPF AS T2 
-        ON TRIM(JOPICU) = TRIM(T2.JTFPAR) 
-        AND T2.JTFTYP NOT IN ('PRNT', 'MSTR')
-        AND T2.JTTTYP IN ('PRNT', 'MSTR') 
-        AND T2.JTTEDT >= {today} 
-        WHERE TRIM(T1.JTTPAR) IN ({specs}) 
-        OR TRIM(T2.JTTPAR) IN ({specs})
+        SELECT DISTINCT TRIM(JTHIMA)
+
+        FROM SCDBFP10.USCKJTPF
+
+        WHERE TRIM(JTHIMA) IN ({specs})
+        AND JTTTYP = 'PRNT'
+        AND JTFTYP NOT IN ('PRNT','MSTR')
+        AND JTTEDT >= {today}
+
+        UNION 
+
+        SELECT DISTINCT TRIM(JTTPAR)
+
+        FROM SCDBFP10.USCKJTPF
+
+        WHERE TRIM(JTTPAR) IN ({specs})
+        AND JTTTYP = 'PRNT'
+        AND JTFTYP NOT IN ('PRNT','MSTR')
+        AND JTTEDT >= {today}
     ''').fetchall()
 
     # pull all customer specs that exist in alaska
@@ -328,7 +332,7 @@ def agreement_header(agreements):
 
     # get all agreement header details from sus as240a
     rows = sus.execute(f'''
-        SELECT 
+        SELECT DISTINCT
         CAST(M7VAGN AS VARCHAR(11)) AS LEAD_VA, 
         CAST(M7ACAN AS VARCHAR(11)) AS LEAD_CA, 
         M7AGTY AS VA_TYPE,
@@ -350,7 +354,8 @@ def agreement_header(agreements):
         TRIM(M7APNM) AS APPROP_NAME,
         '{today}' AS TIMESTAMP, 
         '' AS ALASKA_VA,
-        '' AS ALASKA_CA
+        '' AS ALASKA_CA,
+        CASE WHEN DVT500 LIKE '%055%' THEN 'YES' ELSE 'NO' END AS SEATTLE_DIST
 
         FROM SCDBFP10.PMVHM7PF
 
@@ -358,11 +363,15 @@ def agreement_header(agreements):
         ON M7ACAN = NHCANO
         AND M7ACAN <> 0
 
+        LEFT JOIN SCDBFP10.PMDPDVRF
+        ON CAST(M7VAGN AS VARCHAR(11)) = TRIM(DVCPM9)
+        AND TRIM(DVCPTY) = 'VA'
+
         WHERE M7VAGN IN ({va})
 
         UNION
 
-        SELECT
+        SELECT DISTINCT 
         '0' AS LEAD_VA, 
         CAST(NHCANO AS VARCHAR(11)) AS LEAD_CA, 
         '' AS VA_TYPE,
@@ -384,9 +393,14 @@ def agreement_header(agreements):
         TRIM(NHAPNM) AS APPROP_NAME,
         '{today}' AS TIMESTAMP,
         '' AS ALASKA_VA,
-        '' AS ALASKA_CA
+        '' AS ALASKA_CA,
+        CASE WHEN DVT500 LIKE '%055%' THEN 'YES' ELSE 'NO' END AS SEATTLE_DIST
 
         FROM SCDBFP10.PMPVNHPF
+
+        LEFT JOIN SCDBFP10.PMDPDVRF
+        ON CAST(NHCANO AS VARCHAR(11)) = TRIM(DVCPM9)
+        AND TRIM(DVCPTY) <> 'VA'
 
         WHERE NHCANO IN ({ca})
     ''').fetchall()
@@ -590,9 +604,9 @@ def delete_database_records():
     sql_server.execute(f''' 
         BEGIN TRANSACTION 
 
-        DELETE FROM Alaska_Customer_Eligibility
-        DELETE FROM Alaska_Item_Eligibility
-        DELETE FROM Alaska_Header
+        DELETE FROM Alaska_Customer_Eligibility WHERE TIMESTAMP = '{today}'
+        DELETE FROM Alaska_Item_Eligibility WHERE TIMESTAMP = '{today}'
+        DELETE FROM Alaska_Header WHERE TIMESTAMP = '{today}'
 
         COMMIT
     ''')
@@ -604,7 +618,8 @@ def deviation_details():
     # query all agreement header details and assign to dataset variable
     header = sql_server.execute(f'''
         SELECT * FROM Alaska_Header
-        WHERE TIMESTAMP = '{today}'
+        WHERE TIMESTAMP = '{today}' 
+        AND VA <> '0' 
         ORDER BY VA, CA
     ''').fetchall()
 
@@ -617,7 +632,8 @@ def deviation_details():
         items = sql_server.execute(f'''
             SELECT * FROM Alaska_Item_Eligibility
             WHERE CONCAT(VA,CA) = '{agmt.VA + agmt.CA}' 
-            AND TIMESTAMP = '{today}'
+            AND TIMESTAMP = '{today}' 
+            AND VA <> '0' 
             ORDER BY VA, CA, ITEM
         ''').fetchall()
 
@@ -625,7 +641,8 @@ def deviation_details():
         customers = sql_server.execute(f'''
             SELECT * FROM Alaska_customer_Eligibility
             WHERE CONCAT(VA,CA) = '{agmt.VA + agmt.CA }' 
-            AND TIMESTAMP = '{today}'
+            AND TIMESTAMP = '{today}' 
+            AND VA <> '0' 
             ORDER BY VA, CA, SPEC
         ''').fetchall()
 
@@ -837,6 +854,86 @@ def delete_seattle_records():
     # commit transaction
     sql_server.commit()
 
+
+# function to clear zoned agreements from sql server. Look at agreements with matching items
+# customers and overlapping date range - remove agreement where seattle is not in distribution list.
+def clear_zoned_agreements():
+
+    # get zoned agreements from 
+    zonedAgreements = sql_server.execute(f'''
+        SELECT DISTINCT CONCAT(PARENT.VA,PARENT.CA) AS ZONED
+
+        FROM (
+            SELECT 
+            HEADER.VA, 
+            HEADER.CA, 
+            ITEM.ITEM, 
+            CUSTOMER.SPEC, 
+            HEADER.SEATTLE_DIST 
+
+            FROM ALASKA_HEADER AS HEADER
+
+            INNER JOIN Alaska_Customer_Eligibility AS CUSTOMER
+            ON HEADER.VA = CUSTOMER.VA
+            AND HEADER.CA = CUSTOMER.CA
+
+            INNER JOIN Alaska_Item_Eligibility as ITEM
+            ON HEADER.VA = ITEM.VA 
+            AND HEADER.CA = ITEM.CA
+
+            WHERE HEADER.TIMESTAMP = '{today}'
+        ) AS PARENT
+
+        INNER JOIN (
+            SELECT 
+            HEADER.VA, 
+            HEADER.CA, 
+            ITEM.ITEM, 
+            CUSTOMER.SPEC, 
+            HEADER.SEATTLE_DIST
+
+            FROM ALASKA_HEADER AS HEADER
+
+            INNER JOIN Alaska_Customer_Eligibility AS CUSTOMER
+            ON HEADER.VA = CUSTOMER.VA
+            AND HEADER.CA = CUSTOMER.CA
+
+            INNER JOIN Alaska_Item_Eligibility as ITEM
+            ON HEADER.VA = ITEM.VA 
+            AND HEADER.CA = ITEM.CA
+
+            WHERE HEADER.TIMESTAMP = '{today}'
+        ) AS CHILD
+        ON PARENT.ITEM = CHILD.ITEM
+        AND PARENT.SPEC = CHILD.SPEC
+        AND PARENT.VA <> CHILD.VA
+        AND PARENT.CA <> CHILD.CA
+        AND PARENT.SEATTLE_DIST <> CHILD.SEATTLE_DIST
+
+        WHERE PARENT.SEATTLE_DIST = 'NO'
+    ''').fetchall()
+
+    # do not proceed if there are no zoned agreements to remove
+    if len(zonedAgreements) > 0:
+
+        # format sql string of all zoned agreements in sql server
+        zoned = "'" + "','".join(str(row.ZONED) for row in zonedAgreements) + "'"
+
+        # remove all zoned agreements from sql server
+        sql_server.execute(f'''
+            BEGIN TRANSACTION
+
+            DELETE FROM ALASKA_HEADER WHERE CONCAT(VA, CA) IN ({zoned})
+            DELETE FROM ALASKA_ITEM_ELIGIBILITY WHERE CONCAT(VA, CA) IN ({zoned})
+            DELETE FROM ALASKA_CUSTOMER_ELIGIBILITY WHERE CONCAT(VA, CA) IN ({zoned})
+
+            COMMIT
+        ''')
+
+        # commit transaction
+        sql_server.commit()
+
+
 # function to pull all lead agreements created <yesterday>, and store the agreements that have 
 # customer specs with account ties in alaska in sql serer table alaska_customer_eligibility.
 def upload_alaska_deviations():
@@ -894,6 +991,9 @@ def upload_alaska_deviations():
     # delete all item sourcing information from sql server
     delete_seattle_records()
 
+    # remove zoned agreements where seattle is not in distribution list
+    clear_zoned_agreements()
+
     # get dictionary of agreement criteria for return. dictionary to include agreement header, item, and customer detail
     deviations = deviation_details()
 
@@ -906,4 +1006,3 @@ def upload_alaska_deviations():
         # <yesterday> either have no active items in alaska, or no active customer ties. 
         #delete_database_records()
         #print('no deviatinos to upload')
-
