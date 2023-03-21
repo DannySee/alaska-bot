@@ -4,8 +4,8 @@ from data_pull import upload_alaska_deviations, deviation_details, new_agreement
 
 
 # load list of alaska deviations 
-deviations = upload_alaska_deviations()
-#deviations =  deviation_details()
+#deviations = upload_alaska_deviations()
+deviations =  deviation_details()
 header = deviations['header']
 itemEligibility = deviations['item_eligibility']
 customerEligibility = deviations['customer_eligibility']
@@ -65,6 +65,9 @@ for agmt in header:
 
 # close bluezone sessioon
 bz.disconnect(session)
+
+# send all vadam tie requests to west market field
+outlook.send_vadam()
 
 
     

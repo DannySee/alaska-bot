@@ -1007,4 +1007,3 @@ def upload_alaska_deviations():
         #delete_database_records()
         #print('no deviatinos to upload')
 
-
