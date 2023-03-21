@@ -6,7 +6,7 @@ sql_server = db.sql_server
 
 # define formatted date parameters: yesterday = sus format, today = timestamp format
 today = datetime.now().strftime('%Y-%m-%d')
-yesterday = (datetime.now() - timedelta(1)).strftime('%Y%m%d')
+yesterday = (datetime.now() - timedelta(3)).strftime('%Y%m%d')
 
 
 # function to pull all pricing agreements keyed day prior with customer detail out of 
@@ -1006,3 +1006,5 @@ def upload_alaska_deviations():
         # <yesterday> either have no active items in alaska, or no active customer ties. 
         #delete_database_records()
         #print('no deviatinos to upload')
+
+

@@ -194,7 +194,6 @@ def va_item_eligibility(bzo, items):
             if row == 20: 
                 bzo.SendKey("@v")
                 bzo.WaitReady(10,1)
-                time.sleep(0.3)
                 row = 13 
             else:
                 row += 1 
@@ -229,7 +228,6 @@ def va_customer_eligibility(bzo, customers):
                 if row == 20: 
                     bzo.SendKey("@v")
                     bzo.WaitReady(10,1)
-                    time.sleep(0.3)
                     row = 13 
                 else:
                     row += 1 
@@ -269,8 +267,7 @@ def ca_item_eligibility(bzo, items):
             if row == 20: 
                 bzo.SendKey("@v")
                 bzo.WaitReady(10,1)
-                time.sleep(0.3)
-                row = 13 
+                row = 12
             else:
                 row += 1 
 
@@ -300,7 +297,6 @@ def ca_customer_eligibility(bzo, customers):
                 if row == 20: 
                     bzo.SendKey("@v")
                     bzo.WaitReady(10,1)
-                    time.sleep(0.3)
                     row = 13  
                 else:
                     row += 1 
