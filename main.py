@@ -67,7 +67,7 @@ for agmt in header:
 bz.disconnect(session)
 
 # send all vadam tie requests to west market field
-outlook.send_vadam()
+# outlook.send_vadam()
 
 
     

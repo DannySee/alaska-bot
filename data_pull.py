@@ -6,7 +6,7 @@ sql_server = db.sql_server
 
 # define formatted date parameters: yesterday = sus format, today = timestamp format
 today = datetime.now().strftime('%Y-%m-%d')
-yesterday = (datetime.now() - timedelta(3)).strftime('%Y%m%d')
+yesterday = (datetime.now() - timedelta(1)).strftime('%Y%m%d')
 
 
 # function to pull all pricing agreements keyed day prior with customer detail out of 
@@ -39,7 +39,7 @@ def lead_agreements_created_yesterday():
         ON CAST(M7VAGN AS VARCHAR(11)) = TRIM(DVCPM9)
         AND TRIM(DVCPTY) = 'VA'
 
-        WHERE M7EADT = {yesterday}
+        WHERE M7EADT BETWEEN 20230320 AND 20230321
         AND M7ACAN = 0
         AND M7PPAF = 'PD'
         AND M7VAGD NOT LIKE '%VOID%' 
@@ -79,7 +79,7 @@ def lead_agreements_created_yesterday():
         ON CAST(M7VAGN AS VARCHAR(11)) = TRIM(DVCPM9)
         AND TRIM(DVCPTY) = 'VA'
 
-        WHERE M7EADT = {yesterday}
+        WHERE M7EADT BETWEEN 20230320 AND 20230321
         AND M7ACAN <> 0
         AND M7PPAF = 'PD'
         AND M7VAGD NOT LIKE '%VOID%' 
@@ -113,7 +113,7 @@ def lead_agreements_created_yesterday():
         ON CAST(NHCANO AS VARCHAR(11)) = TRIM(DVCPM9)
         AND TRIM(DVCPTY) = 'CA'
 
-        WHERE NHEADT = {yesterday}
+        WHERE NHEADT BETWEEN 20230320 AND 20230321
         AND NHCVAN = 0
         AND NHPPAF = 'PD'
         AND NHCADC NOT LIKE '%VOID%' 
@@ -861,7 +861,7 @@ def clear_zoned_agreements():
 
     # get zoned agreements from 
     zonedAgreements = sql_server.execute(f'''
-        SELECT DISTINCT CONCAT(PARENT.VA,PARENT.CA) AS ZONED
+        SELECT DISTINCT CONCAT(HEADER.VA,HEADER.CA) AS ZONED
 
         FROM (
             SELECT 
@@ -884,33 +884,23 @@ def clear_zoned_agreements():
             WHERE HEADER.TIMESTAMP = '{today}'
         ) AS PARENT
 
-        INNER JOIN (
-            SELECT 
-            HEADER.VA, 
-            HEADER.CA, 
-            ITEM.ITEM, 
-            CUSTOMER.SPEC, 
-            HEADER.SEATTLE_DIST
+        INNER JOIN Alaska_Customer_Eligibility AS CUSTOMER 
+        ON PARENT.SPEC = CUSTOMER.SPEC
+        AND CONCAT(PARENT.VA, PARENT.CA) <> CONCAT(CUSTOMER.VA, CUSTOMER.CA)
+        AND CUSTOMER.TIMESTAMP = '{today}'
 
-            FROM ALASKA_HEADER AS HEADER
+        INNER JOIN Alaska_ITEM_Eligibility AS ITEM 
+        ON PARENT.ITEM = ITEM.ITEM
+        AND CUSTOMER.VA = ITEM.VA
+        AND CUSTOMER.CA = ITEM.CA
+        AND ITEM.TIMESTAMP = '{today}'
 
-            INNER JOIN Alaska_Customer_Eligibility AS CUSTOMER
-            ON HEADER.VA = CUSTOMER.VA
-            AND HEADER.CA = CUSTOMER.CA
+        INNER JOIN Alaska_Header AS HEADER
+        ON CUSTOMER.VA = HEADER.VA
+        AND CUSTOMER.CA = HEADER.CA
+        AND HEADER.TIMESTAMP = '{today}'
 
-            INNER JOIN Alaska_Item_Eligibility as ITEM
-            ON HEADER.VA = ITEM.VA 
-            AND HEADER.CA = ITEM.CA
-
-            WHERE HEADER.TIMESTAMP = '{today}'
-        ) AS CHILD
-        ON PARENT.ITEM = CHILD.ITEM
-        AND PARENT.SPEC = CHILD.SPEC
-        AND PARENT.VA <> CHILD.VA
-        AND PARENT.CA <> CHILD.CA
-        AND PARENT.SEATTLE_DIST <> CHILD.SEATTLE_DIST
-
-        WHERE PARENT.SEATTLE_DIST = 'NO'
+        WHERE HEADER.SEATTLE_DIST = 'NO'
     ''').fetchall()
 
     # do not proceed if there are no zoned agreements to remove
@@ -1006,4 +996,5 @@ def upload_alaska_deviations():
         # <yesterday> either have no active items in alaska, or no active customer ties. 
         #delete_database_records()
         #print('no deviatinos to upload')
+
 

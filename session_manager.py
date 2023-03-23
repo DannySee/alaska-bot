@@ -264,7 +264,7 @@ def ca_item_eligibility(bzo, items):
             bzo.WriteScreen('        ', row, 57)
             bzo.WriteScreen(item.CA_ALASKA_ADJ_AP, row, 57)
             
-            if row == 20: 
+            if row == 19: 
                 bzo.SendKey("@v")
                 bzo.WaitReady(10,1)
                 row = 12
