@@ -1,6 +1,7 @@
 import session_manager as bz
 
 from data_pull import upload_alaska_deviations, deviation_details, new_agreement
+from outlook import send_vadam_request
 
 
 # load list of alaska deviations 
@@ -67,7 +68,7 @@ for agmt in header:
 bz.disconnect(session)
 
 # send all vadam tie requests to west market field
-# outlook.send_vadam()
+send_vadam_request()
 
 
     

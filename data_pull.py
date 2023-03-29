@@ -39,7 +39,7 @@ def lead_agreements_created_yesterday():
         ON CAST(M7VAGN AS VARCHAR(11)) = TRIM(DVCPM9)
         AND TRIM(DVCPTY) = 'VA'
 
-        WHERE M7EADT BETWEEN 20230320 AND 20230321
+        WHERE M7EADT = {yesterday}
         AND M7ACAN = 0
         AND M7PPAF = 'PD'
         AND M7VAGD NOT LIKE '%VOID%' 
@@ -79,7 +79,7 @@ def lead_agreements_created_yesterday():
         ON CAST(M7VAGN AS VARCHAR(11)) = TRIM(DVCPM9)
         AND TRIM(DVCPTY) = 'VA'
 
-        WHERE M7EADT BETWEEN 20230320 AND 20230321
+        WHERE M7EADT = {yesterday}
         AND M7ACAN <> 0
         AND M7PPAF = 'PD'
         AND M7VAGD NOT LIKE '%VOID%' 
@@ -113,7 +113,7 @@ def lead_agreements_created_yesterday():
         ON CAST(NHCANO AS VARCHAR(11)) = TRIM(DVCPM9)
         AND TRIM(DVCPTY) = 'CA'
 
-        WHERE NHEADT BETWEEN 20230320 AND 20230321
+        WHERE NHEADT = {yesterday}
         AND NHCVAN = 0
         AND NHPPAF = 'PD'
         AND NHCADC NOT LIKE '%VOID%' 
@@ -431,7 +431,7 @@ def agreement_item_eligibility(agreements):
         QBXVBS AS VA_REBATE_BASIS,
         CAST(CAST(ROUND(QBXVRB,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS VA_REBATE_AMT, 
         CAST(CAST(ROUND(QBXVRB,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS VA_ALASKA_REBATE_AMT, 
-        CASE WHEN QBXVAV = 1 THEN '100' ELSE CAST(CAST(ROUND(QBXVAV,3) AS DECIMAL(10,3)) AS VARCHAR(11)) END AS VA_APPROP_AMT, 
+        CASE WHEN QBXVAV = 1 AND LEFT(QBXVBS,1) <> 'D' THEN '100' ELSE CAST(CAST(ROUND(QBXVAV,3) AS DECIMAL(10,3)) AS VARCHAR(11)) END AS VA_APPROP_AMT, 
         QXACBS AS CA_REBATE_BASIS,
         CAST(CAST(ROUND(QXXAMT,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS CA_ALLOWANCE, 
         CAST(CAST(ROUND(QXCBAJ,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS CA_COMM_BASE,
@@ -461,7 +461,7 @@ def agreement_item_eligibility(agreements):
         QBXVBS AS VA_REBATE_BASIS,
         CAST(CAST(ROUND(QBXVRB,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS VA_REBATE_AMT, 
         CAST(CAST(ROUND(QBXVRB,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS VA_ALASKA_REBATE_AMT, 
-        CASE WHEN QBXVAV = 1 THEN '100' ELSE CAST(CAST(ROUND(QBXVAV,3) AS DECIMAL(10,3)) AS VARCHAR(11)) END AS VA_APPROP_AMT, 
+        CASE WHEN QBXVAV = 1 AND LEFT(QBXVBS,1) <> 'D' THEN '100' ELSE CAST(CAST(ROUND(QBXVAV,3) AS DECIMAL(10,3)) AS VARCHAR(11)) END AS VA_APPROP_AMT, 
         '' AS CA_REBATE_BASIS,
         '' AS CA_ALLOWANCE, 
         '' AS CA_COMM_BASE,
@@ -924,6 +924,23 @@ def clear_zoned_agreements():
         sql_server.commit()
 
 
+# function to return all vendors that either need to be pulled into alaska or require vadam ties. 
+def vadam_ties():
+
+    # query vendors for agreements that could not be created from *todays job
+    vendors = sql_server.execute(f'''
+        SELECT DISTINCT VENDOR_NBR 
+
+        FROM Alaska_Header
+
+        WHERE TIMESTAMP = '{today}'
+        AND LEFT(ALASKA_VA,2) = 'VA' 
+    ''').fetchall()
+
+    # return list of vendors
+    return vendors
+
+
 # function to pull all lead agreements created <yesterday>, and store the agreements that have 
 # customer specs with account ties in alaska in sql serer table alaska_customer_eligibility.
 def upload_alaska_deviations():
@@ -996,5 +1013,3 @@ def upload_alaska_deviations():
         # <yesterday> either have no active items in alaska, or no active customer ties. 
         #delete_database_records()
         #print('no deviatinos to upload')
-
-
