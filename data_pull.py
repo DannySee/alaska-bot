@@ -49,7 +49,7 @@ def lead_agreements_created_yesterday():
             OR UPPER(DVPDDA) <> LOWER(DVPDDA) 
             OR TRIM(DVPDDA) = '055'
         )
-        AND DVT500 NOT LIKE '%450'
+        AND TRIM(DVT500) NOT LIKE '%450'
 
         UNION
 
@@ -89,7 +89,7 @@ def lead_agreements_created_yesterday():
             OR UPPER(DVPDDA) <> LOWER(DVPDDA) 
             OR TRIM(DVPDDA) = '055'
         )
-        AND DVT500 NOT LIKE '%450'
+        AND TRIM(DVT500) NOT LIKE '%450'
 
         UNION
 
@@ -123,7 +123,7 @@ def lead_agreements_created_yesterday():
             OR UPPER(DVPDDA) <> LOWER(DVPDDA) 
             OR TRIM(DVPDDA) = '055'
         )
-        AND DVT500 NOT LIKE '%450'
+        AND TRIM(DVT500) NOT LIKE '%450'
     ''').fetchall()
 
     # return list of values
@@ -514,25 +514,59 @@ def alaska_items(dataset):
     # establish connection to sus as450a
     sus = db.sus('450')
 
-    # format sql string of all items on agreements loaded <yesterday>
-    items = "'" + "','".join(str(row.ITEM) for row in dataset) + "'"
+    # get number of items to query
+    rowCount = len(dataset)
 
-    # pull all customer specs with account ties in alaska
-    rows = sus.execute(f'''
-        SELECT DISTINCT 
-        TRIM(JFITEM) AS ITEM, 
-        TRIM(MQPVSF) AS SOURCE_VNDR
+    # sus odbc drivers cannot handl > 10000 records in where statement - handle differently depending on size of dataset
+    if rowCount > 10000:
 
-        FROM SCDBFP10.USIAJFPF 
+        # setup list to append query results
+        allItems = []
 
-        LEFT JOIN SCDBFP10.USIAMQRF 
-        ON JFITEM = MQITEM
+        # loop through dataset in chuncks of 10000 records
+        for i in range(0, rowCount, 10000):
 
-        WHERE TRIM(JFITEM) IN ({items}) 
-    ''').fetchall()
+            # format sql string of all items on agreements loaded <yesterday>
+            items = "'" + "','".join(str(row.ITEM) for row in dataset[i:i+10000]) + "'"
 
-    # return list of records
-    return rows
+            # pull all customer specs with account ties in alaska
+            itemChunk = sus.execute(f'''
+                SELECT DISTINCT 
+                TRIM(JFITEM) AS ITEM, 
+                TRIM(MQPVSF) AS SOURCE_VNDR
+
+                FROM SCDBFP10.USIAJFPF 
+
+                LEFT JOIN SCDBFP10.USIAMQRF 
+                ON JFITEM = MQITEM
+
+                WHERE TRIM(JFITEM) IN ({items}) 
+            ''').fetchall()
+
+            # append query return to list
+            allItems = allItems + itemChunk
+            
+    elif rowCount > 0:
+
+        # format sql string of all items on agreements loaded <yesterday>
+        items = "'" + "','".join(str(row.ITEM) for row in dataset) + "'"
+
+        # pull all customer specs with account ties in alaska
+        allItems = sus.execute(f'''
+            SELECT DISTINCT 
+            TRIM(JFITEM) AS ITEM, 
+            TRIM(MQPVSF) AS SOURCE_VNDR
+
+            FROM SCDBFP10.USIAJFPF 
+
+            LEFT JOIN SCDBFP10.USIAMQRF 
+            ON JFITEM = MQITEM
+
+            WHERE TRIM(JFITEM) IN ({items})
+        ''').fetchall()
+
+    # return list of alaska items
+    return allItems
 
 
 # function to delete all lead agreements from the alaska_item_eligibility and alaska_customer_elgibility
@@ -1013,3 +1047,4 @@ def upload_alaska_deviations():
         # <yesterday> either have no active items in alaska, or no active customer ties. 
         #delete_database_records()
         #print('no deviatinos to upload')
+
