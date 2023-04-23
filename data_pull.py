@@ -975,6 +975,52 @@ def vadam_ties():
     return vendors
 
 
+# function to return all active agreements keyed by the alasak bot. 
+def active_agreements():
+
+    # get today's date
+    now = datetime.now()
+
+    agreements = sql_server.execute(f'''
+        SELECT
+        RIGHT('00000' + VA, 9) AS VA, 
+        ALASKA_VA
+
+        FROM ALASKA_HEADER 
+
+        WHERE DATEFROMPARTS('20' + RIGHT(END_DT,2), LEFT(END_DT,2), RIGHT(LEFT(END_DT,4),2)) >= '{now}' 
+        AND ALASKA_VA NOT IN ('', 'VA10023', 'VA10024')
+    ''')
+
+    return agreements
+
+
+# function to return active agreements keyed by the bot which have been updated yesterday 
+def changed_agreements_header(agreements):
+
+    # format active agreements for SQL statement
+    activeAgreements = "'" + "','".join(str(row.VA) for row in agreements) + "'"
+
+    # establish connection to as240a
+    sus = db.sus('240')
+
+    # query agreements changed yesterday 
+    changedAgreements = sus.execute(f'''
+        SELECT 
+        O6ENNM, 
+        O6CHDS, 
+        O6CHNV
+
+        FROM SCDBFP10.PMAGO6PF
+
+        WHERE O6PMAC = 'VPD'
+        AND O6EADT = 20230418
+        AND O6ENNM IN ({activeAgreements})
+    ''')
+
+    return changedAgreements
+
+
 # function to pull all lead agreements created <yesterday>, and store the agreements that have 
 # customer specs with account ties in alaska in sql serer table alaska_customer_eligibility.
 def upload_alaska_deviations():
@@ -1047,4 +1093,10 @@ def upload_alaska_deviations():
         # <yesterday> either have no active items in alaska, or no active customer ties. 
         #delete_database_records()
         #print('no deviatinos to upload')
+
+
+#activeAgreements = active_agreements()
+#agreementReference = {agreement[0]:agreement[1] for agreement in activeAgreements}
+
+#updatedAgreements
 
