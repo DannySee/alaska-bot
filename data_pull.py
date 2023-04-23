@@ -134,13 +134,13 @@ def lead_agreements_created_yesterday():
 def insert_into_sql_server(dataset, table):
 
     # get row count of dataset
-    rowCount = len(dataset)
+    row_count = len(dataset)
 
     # sql server has an insert row max of 1000 records - handle differently depending on size of dataset
-    if rowCount > 1000:
+    if row_count > 1000:
 
         # loop through dataset in chuncks of 1000 records
-        for i in range(0, rowCount, 1000):
+        for i in range(0, row_count, 1000):
 
             # format chunk of 1000 insert into sql server
             rows = ','.join(str(row) for row in dataset[i:i+1000])
@@ -148,7 +148,7 @@ def insert_into_sql_server(dataset, table):
             
         # commit insert statement after all chunks have been loaded in the server
         sql_server.commit()
-    elif rowCount > 0:
+    elif row_count > 0:
 
         # format dataset, insert into sql server and commit
         rows = ','.join(str(row) for row in dataset)
@@ -166,7 +166,7 @@ def alaska_accounts(dataset):
     specs = "'" + "','".join(str(row.SPEC) for row in dataset) + "'"
 
     # pull all customer specs with account ties in alaska
-    activeTies = sus.execute(f'''
+    active_ties = sus.execute(f'''
         SELECT DISTINCT TRIM(AZCEEN) AS SPEC
 
         FROM SCDBFP10.USCNAZL0 
@@ -199,7 +199,7 @@ def alaska_accounts(dataset):
     ''').fetchall()
 
     # pull all customer specs that exist in alaska
-    activeSpecs = sus.execute(f'''
+    active_specs = sus.execute(f'''
         SELECT DISTINCT TRIM(JUCEEN) AS SPEC
 
         FROM SCDBFP10.USCLJUPF 
@@ -219,8 +219,8 @@ def alaska_accounts(dataset):
 
     # compile dictionary of active ties and active specs
     customers = {
-        'account_ties':activeTies,
-        'active_specs':activeSpecs
+        'account_ties':active_ties,
+        'active_specs':active_specs
     }
 
     return customers
@@ -231,8 +231,8 @@ def alaska_accounts(dataset):
 def delete_agreements_without_customers(dataset):
 
     # format string of customer specs which do have ties in alaska
-    accountTies = "'" + "','".join(str(row.SPEC) for row in dataset['account_ties']) + "'"
-    activeSpecs = "'" + "','".join(str(row.SPEC) for row in dataset['active_specs']) + "'"
+    account_ties = "'" + "','".join(str(row.SPEC) for row in dataset['account_ties']) + "'"
+    active_specs = "'" + "','".join(str(row.SPEC) for row in dataset['active_specs']) + "'"
 
     # delete all lead agreements where there are no customer specs with account ties in alaska 
     # and commit transaction
@@ -243,7 +243,7 @@ def delete_agreements_without_customers(dataset):
         
         FROM Alaska_Customer_Eligibility
         
-        WHERE SPEC NOT IN ({activeSpecs})
+        WHERE SPEC NOT IN ({active_specs})
         AND TIMESTAMP = '{today}'
 
         DELETE 
@@ -255,7 +255,7 @@ def delete_agreements_without_customers(dataset):
 
             FROM Alaska_Customer_Eligibility
 
-            WHERE SPEC IN ({accountTies})
+            WHERE SPEC IN ({account_ties})
             AND VA <> '0'
         )
         AND CA NOT IN (
@@ -263,7 +263,7 @@ def delete_agreements_without_customers(dataset):
             
             FROM Alaska_Customer_Eligibility
 
-            WHERE SPEC IN ({accountTies})
+            WHERE SPEC IN ({account_ties})
             AND CA <> '0'
         )
         AND TIMESTAMP = '{today}'
@@ -324,11 +324,11 @@ def agreement_header(agreements):
     sus = db.sus('240')
 
     # clean dictionary values for use in query
-    agreementDct = parse_agreement_dictionary(agreements)
+    agreement_dictionary = parse_agreement_dictionary(agreements)
 
     # set query string for vendor and customer agreements 
-    va = agreementDct['va']
-    ca = agreementDct['ca']
+    va = agreement_dictionary['va']
+    ca = agreement_dictionary['ca']
 
     # get all agreement header details from sus as240a
     rows = sus.execute(f'''
@@ -416,11 +416,11 @@ def agreement_item_eligibility(agreements):
     sus = db.sus('240')
 
     # clean dictionary values for use in query
-    agreementDct = parse_agreement_dictionary(agreements)
+    agreement_dictionary = parse_agreement_dictionary(agreements)
 
     # set query string for vendor and customer agreements 
-    va = agreementDct['va']
-    ca = agreementDct['ca']
+    va = agreement_dictionary['va']
+    ca = agreement_dictionary['ca']
 
     # get all agreement item eligibility details from sus as240a
     rows = sus.execute(f'''
@@ -515,22 +515,22 @@ def alaska_items(dataset):
     sus = db.sus('450')
 
     # get number of items to query
-    rowCount = len(dataset)
+    row_count = len(dataset)
 
     # sus odbc drivers cannot handl > 10000 records in where statement - handle differently depending on size of dataset
-    if rowCount > 10000:
+    if row_count > 10000:
 
         # setup list to append query results
-        allItems = []
+        all_items = []
 
         # loop through dataset in chuncks of 10000 records
-        for i in range(0, rowCount, 10000):
+        for i in range(0, row_count, 10000):
 
             # format sql string of all items on agreements loaded <yesterday>
             items = "'" + "','".join(str(row.ITEM) for row in dataset[i:i+10000]) + "'"
 
             # pull all customer specs with account ties in alaska
-            itemChunk = sus.execute(f'''
+            item_chunk = sus.execute(f'''
                 SELECT DISTINCT 
                 TRIM(JFITEM) AS ITEM, 
                 TRIM(MQPVSF) AS SOURCE_VNDR
@@ -544,15 +544,15 @@ def alaska_items(dataset):
             ''').fetchall()
 
             # append query return to list
-            allItems = allItems + itemChunk
+            all_items = all_items + item_chunk
             
-    elif rowCount > 0:
+    elif row_count > 0:
 
         # format sql string of all items on agreements loaded <yesterday>
         items = "'" + "','".join(str(row.ITEM) for row in dataset) + "'"
 
         # pull all customer specs with account ties in alaska
-        allItems = sus.execute(f'''
+        all_items = sus.execute(f'''
             SELECT DISTINCT 
             TRIM(JFITEM) AS ITEM, 
             TRIM(MQPVSF) AS SOURCE_VNDR
@@ -566,7 +566,7 @@ def alaska_items(dataset):
         ''').fetchall()
 
     # return list of alaska items
-    return allItems
+    return all_items
 
 
 # function to delete all lead agreements from the alaska_item_eligibility and alaska_customer_elgibility
@@ -658,8 +658,8 @@ def deviation_details():
     ''').fetchall()
 
     # loop through each each agreement and add to respective dictionary
-    itemEligibility = {}
-    customerEligibility = {}
+    item_eligibility = {}
+    customer_eligibility = {}
     for agmt in header:
 
         # query all agreement item eligibility details and assign to dataset variable
@@ -680,14 +680,14 @@ def deviation_details():
             ORDER BY VA, CA, SPEC
         ''').fetchall()
 
-        itemEligibility[agmt.VA + agmt.CA] = items
-        customerEligibility[agmt.VA + agmt.CA] = customers
+        item_eligibility[agmt.VA + agmt.CA] = items
+        customer_eligibility[agmt.VA + agmt.CA] = customers
 
     # assemble dictionary of all agreement information and return 
     deviations = {
         'header': header, 
-        'item_eligibility': itemEligibility,
-        'customer_eligibility': customerEligibility
+        'item_eligibility': item_eligibility,
+        'customer_eligibility': customer_eligibility
     }
     return deviations
 
@@ -713,7 +713,7 @@ def update_source_vendor():
     sql_server.commit()
 
     # get list of items sourced from seattle
-    seattleItems = sql_server.execute(f'''
+    seattle_items = sql_server.execute(f'''
         SELECT DISTINCT ITEM
 
         FROM Alaska_Item_Eligibility
@@ -723,7 +723,7 @@ def update_source_vendor():
     ''').fetchall()
 
     # return list of items sourced from seattle
-    return seattleItems
+    return seattle_items
 
 
 # function to insert all items on alaska deviations into the SQL server so that the appropriate 
@@ -737,7 +737,7 @@ def seattle_item_details(dataset):
     items = "'" + "','".join(str(row.ITEM) for row in dataset) + "'"
 
     # pull items, net weight, cross weight, catch weight, and freight for items sourced from seattle
-    seattleDetails = sus.execute(f'''
+    seattle_item_details = sus.execute(f'''
         SELECT 
         TRIM(JFITEM) AS ITEM, 
         CAST(JFITNW AS VARCHAR(11)) AS NET_WEIGHT, 
@@ -755,7 +755,7 @@ def seattle_item_details(dataset):
     ''').fetchall()
     
     # return list of seattle item details
-    return seattleDetails
+    return seattle_item_details
 
 
 # function to calculate alaska rate. The calculation is determined by the cost basis of the original (lead) agreement
@@ -856,7 +856,7 @@ def calculate_alaska_rate():
 
 
 # function to update sql server with newly created agreements
-def new_agreement(primaryKey, va, ca):
+def new_agreement(primary_key, va, ca):
 
     # update alaska_header table with newly created agreement numbers
     sql_server.execute(f'''
@@ -865,7 +865,7 @@ def new_agreement(primaryKey, va, ca):
         SET ALASKA_VA = '{va}',
         ALASKA_CA = '{ca}'
 
-        WHERE PRIMARY_KEY = {primaryKey}
+        WHERE PRIMARY_KEY = {primary_key}
     ''')
 
     # commit transaction 
@@ -894,7 +894,7 @@ def delete_seattle_records():
 def clear_zoned_agreements():
 
     # get zoned agreements from 
-    zonedAgreements = sql_server.execute(f'''
+    zoned_agreements = sql_server.execute(f'''
         SELECT DISTINCT CONCAT(HEADER.VA,HEADER.CA) AS ZONED
 
         FROM (
@@ -938,10 +938,10 @@ def clear_zoned_agreements():
     ''').fetchall()
 
     # do not proceed if there are no zoned agreements to remove
-    if len(zonedAgreements) > 0:
+    if len(zoned_agreements) > 0:
 
         # format sql string of all zoned agreements in sql server
-        zoned = "'" + "','".join(str(row.ZONED) for row in zonedAgreements) + "'"
+        zoned = "'" + "','".join(str(row.ZONED) for row in zoned_agreements) + "'"
 
         # remove all zoned agreements from sql server
         sql_server.execute(f'''
@@ -999,26 +999,26 @@ def active_agreements():
 def changed_agreements_header(agreements):
 
     # format active agreements for SQL statement
-    activeAgreements = "'" + "','".join(str(row.VA) for row in agreements) + "'"
+    active_agreements = "'" + "','".join(str(row.VA) for row in agreements) + "'"
 
     # establish connection to as240a
     sus = db.sus('240')
 
     # query agreements changed yesterday 
-    changedAgreements = sus.execute(f'''
+    changed_agreements = sus.execute(f'''
         SELECT 
-        O6ENNM, 
-        O6CHDS, 
-        O6CHNV
+        O6ENNM AS VA, 
+        O6CHDS AS FIELD, 
+        O6CHNV AS VALUE
 
         FROM SCDBFP10.PMAGO6PF
 
         WHERE O6PMAC = 'VPD'
         AND O6EADT = 20230418
-        AND O6ENNM IN ({activeAgreements})
+        AND O6ENNM IN ({active_agreements})
     ''')
 
-    return changedAgreements
+    return changed_agreements
 
 
 # function to pull all lead agreements created <yesterday>, and store the agreements that have 
@@ -1026,51 +1026,51 @@ def changed_agreements_header(agreements):
 def upload_alaska_deviations():
 
     # get list of all agreements created yesterday with customer detail
-    allAgreements = lead_agreements_created_yesterday()
+    all_agreements = lead_agreements_created_yesterday()
 
     # the following functions require alaska records. if records are missing at any point, the function 
     # will (and should) fail. in this case, a cleanup will be run to purge today's records from the server. 
     #try:
 
     # insert agreement/customer eligibility dataset into sql server and return remaining items
-    insert_into_sql_server(allAgreements, 'Alaska_Customer_Eligibility')
+    insert_into_sql_server(all_agreements, 'Alaska_Customer_Eligibility')
 
     # get list of all customer specs with account ties in alska
-    alaskaSpecs = alaska_accounts(allAgreements)
+    alaska_specs = alaska_accounts(all_agreements)
 
     # delete agreements from sql server that do not have specs attached with account ties 
     # in alaska. return list of <relevent> agreement numbers
-    alaskaDeviations = delete_agreements_without_customers(alaskaSpecs)
+    alaskaDeviations = delete_agreements_without_customers(alaska_specs)
 
     # get list of alaska agreement item eligibliity details from sus
-    agreementItemEligibility = agreement_item_eligibility(alaskaDeviations)
+    item_eligibility = agreement_item_eligibility(alaskaDeviations)
 
     # insert agreement/item eligibility dataset into sql server
-    insert_into_sql_server(agreementItemEligibility, 'Alaska_Item_Eligibility')
+    insert_into_sql_server(item_eligibility, 'Alaska_Item_Eligibility')
 
     # get list of all items active alska
-    alaskaItems = alaska_items(agreementItemEligibility)
+    alaska_items = alaska_items(item_eligibility)
 
     # get list of agreements from sql server that do not have active items in alaska. 
-    alaskaDeviations = delete_agreements_without_items(alaskaItems)
+    alaska_deviations = delete_agreements_without_items(alaska_items)
 
     # insert item and source vendor details into sql server
-    insert_into_sql_server(alaskaItems, 'Item_Source_Vendor')
+    insert_into_sql_server(alaska_items, 'Item_Source_Vendor')
 
     # update Alaska_Item_Eligibility with source vendor information and return list of items sourced from seattle
-    seattleItems = update_source_vendor()
+    seattle_items = update_source_vendor()
 
     # get list of alaska item details sourced from seattle
-    seattleItemDetail = seattle_item_details(seattleItems)
+    seattle_item_details = seattle_item_details(seattle_items)
 
     # insert seattle item detail into sql server
-    insert_into_sql_server(seattleItemDetail, 'Seattle_Items')
+    insert_into_sql_server(seattle_item_details, 'Seattle_Items')
 
     # get list of alaska agreement header details from sql servr
-    agreementHeader = agreement_header(alaskaDeviations)
+    agreement_header = agreement_header(alaska_deviations)
 
     # insert agreement header dataset into sql server
-    insert_into_sql_server(agreementHeader, 'Alaska_Header')
+    insert_into_sql_server(agreement_header, 'Alaska_Header')
 
     # calculate alska rate in sql server
     calculate_alaska_rate()
@@ -1095,8 +1095,23 @@ def upload_alaska_deviations():
         #print('no deviatinos to upload')
 
 
-#activeAgreements = active_agreements()
-#agreementReference = {agreement[0]:agreement[1] for agreement in activeAgreements}
+# get list of all active lead agreement w/ local agreement keyed by alaska. 
+active_agreements = active_agreements()
 
-#updatedAgreements
+# dictionary of all agreements where key is lead va and item is alaska va
+agreement_reference = {agreement[0]:agreement[1] for agreement in active_agreements}
 
+# get list of updated agreements  
+updated_agreements = changed_agreements_header(active_agreements)
+
+# create dictionary of updated agreements using the alaska va as the key
+all_updates = {}
+for agreement in updated_agreements:
+
+    va = agreement_reference[agreement.VA]
+    field = agreement.FIELD
+    value = agreement.VALUE
+    
+    compiled_updates = all_updates.setdefault(va, {'field': [], 'value': []})
+    compiled_updates['field'].append(field)
+    compiled_updates['value'].append(value)
