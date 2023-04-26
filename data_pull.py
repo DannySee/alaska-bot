@@ -990,7 +990,7 @@ def active_agreements():
 
         WHERE DATEFROMPARTS('20' + RIGHT(END_DT,2), LEFT(END_DT,2), RIGHT(LEFT(END_DT,4),2)) >= '{now}' 
         AND ALASKA_VA NOT IN ('', 'VA10023', 'VA10024')
-    ''')
+    ''').fetchall()
 
     return agreements
 
@@ -1008,15 +1008,29 @@ def changed_agreements_header(agreements):
     changed_agreements = sus.execute(f'''
         SELECT 
         O6ENNM AS VA, 
-        O6CHDS AS FIELD, 
-        O6CHNV AS VALUE
+        TRIM(O6CHDS) AS FIELD, 
+        CASE 
+            WHEN O6CHFN = 'M7VASD' THEN LEFT(RIGHT(M7VASD,4),2) || RIGHT(M7VASD,2) || RIGHT(LEFT(M7VASD,4),2) 
+            WHEN O6CHFN = 'M7VAED' THEN LEFT(RIGHT(M7VAED,4),2) || RIGHT(M7VAED,2) || RIGHT(LEFT(M7VAED,4),2)
+        END AS VALUE
 
         FROM SCDBFP10.PMAGO6PF
 
+        INNER JOIN (
+            SELECT 
+            RIGHT('000000000' || CAST(M7VAGN AS VARCHAR(11)), 9) AS M7VAGN, 
+            M7VASD, 
+            M7VAED 
+
+            FROM SCDBFP10.PMVHM7PF
+        )
+        ON O6ENNM = M7VAGN
+
         WHERE O6PMAC = 'VPD'
-        AND O6EADT = 20230418
+        AND O6EADT >= 20230401
+        AND O6CHFN IN ('M7VASD','M7VAED')
         AND O6ENNM IN ({active_agreements})
-    ''')
+    ''').fetchall()
 
     return changed_agreements
 
@@ -1040,37 +1054,37 @@ def upload_alaska_deviations():
 
     # delete agreements from sql server that do not have specs attached with account ties 
     # in alaska. return list of <relevent> agreement numbers
-    alaskaDeviations = delete_agreements_without_customers(alaska_specs)
+    alaska_deviations = delete_agreements_without_customers(alaska_specs)
 
     # get list of alaska agreement item eligibliity details from sus
-    item_eligibility = agreement_item_eligibility(alaskaDeviations)
+    item_eligibility = agreement_item_eligibility(alaska_deviations)
 
     # insert agreement/item eligibility dataset into sql server
     insert_into_sql_server(item_eligibility, 'Alaska_Item_Eligibility')
 
     # get list of all items active alska
-    alaska_items = alaska_items(item_eligibility)
+    valid_alaska_items = alaska_items(item_eligibility)
 
     # get list of agreements from sql server that do not have active items in alaska. 
-    alaska_deviations = delete_agreements_without_items(alaska_items)
+    alaska_deviations = delete_agreements_without_items(valid_alaska_items)
 
     # insert item and source vendor details into sql server
-    insert_into_sql_server(alaska_items, 'Item_Source_Vendor')
+    insert_into_sql_server(valid_alaska_items, 'Item_Source_Vendor')
 
     # update Alaska_Item_Eligibility with source vendor information and return list of items sourced from seattle
     seattle_items = update_source_vendor()
 
     # get list of alaska item details sourced from seattle
-    seattle_item_details = seattle_item_details(seattle_items)
+    seattle_sourcing = seattle_item_details(seattle_items)
 
     # insert seattle item detail into sql server
-    insert_into_sql_server(seattle_item_details, 'Seattle_Items')
+    insert_into_sql_server(seattle_sourcing, 'Seattle_Items')
 
     # get list of alaska agreement header details from sql servr
-    agreement_header = agreement_header(alaska_deviations)
+    header_details = agreement_header(alaska_deviations)
 
     # insert agreement header dataset into sql server
-    insert_into_sql_server(agreement_header, 'Alaska_Header')
+    insert_into_sql_server(header_details, 'Alaska_Header')
 
     # calculate alska rate in sql server
     calculate_alaska_rate()
@@ -1095,23 +1109,35 @@ def upload_alaska_deviations():
         #print('no deviatinos to upload')
 
 
-# get list of all active lead agreement w/ local agreement keyed by alaska. 
-active_agreements = active_agreements()
 
-# dictionary of all agreements where key is lead va and item is alaska va
-agreement_reference = {agreement[0]:agreement[1] for agreement in active_agreements}
 
-# get list of updated agreements  
-updated_agreements = changed_agreements_header(active_agreements)
+def update_ended_deals():
 
-# create dictionary of updated agreements using the alaska va as the key
-all_updates = {}
-for agreement in updated_agreements:
 
-    va = agreement_reference[agreement.VA]
-    field = agreement.FIELD
-    value = agreement.VALUE
-    
-    compiled_updates = all_updates.setdefault(va, {'field': [], 'value': []})
-    compiled_updates['field'].append(field)
-    compiled_updates['value'].append(value)
+    # get list of all active lead agreement w/ local agreement keyed by alaska. 
+    bot_agreements = active_agreements()
+
+    # dictionary of all agreements where key is lead va and item is alaska va
+    agreement_reference = {agreement[0]:agreement[1] for agreement in bot_agreements}
+
+    # get list of updated agreements  
+    updated_agreements = changed_agreements_header(bot_agreements)
+
+    # create dictionary of updated agreements using the alaska va as the key
+    compiled_updates = {}
+    for agreement in updated_agreements:
+
+        va = agreement_reference[agreement.VA]
+        field = agreement.FIELD
+        value = str(agreement.VALUE)
+
+        if va not in compiled_updates: compiled_updates[va] = {'field': [], 'value': []}
+        
+        compiled_updates[va]['field'].append(field)
+        compiled_updates[va]['value'].append(value)
+
+    print(compiled_updates)
+
+
+
+
