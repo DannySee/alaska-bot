@@ -62,6 +62,9 @@ for agmt in header:
     bz.commit_transaction(session)
     new_agreement(agmt.PRIMARY_KEY, va, ca)
 
+    # end modified agreements 
+    
+
     print(f'va:{va}\nca:{ca}')
 
 # close bluezone sessioon

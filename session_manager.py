@@ -154,7 +154,40 @@ def end_agreement(bzo, va, end_date):
         while checkScreen(bzo, endScreen, 24) == False:
             bzo.SendKey("<Enter>")
             bzo.WaitReady(10,1)
-            
+
+        commit_transaction(bzo)
+
+        return 'success'
+    
+# incomplete
+def retro_void_agreement(bzo, va, date):
+    startScreen = "Agreement Header"
+    endScreen = "Press F7 to Update, F3 to Exit, or F15 to return to prompt."
+    errScreen = "Invalid date; must be in MMDDYY format."
+
+    ret_val = maintain_va(bzo, va)
+
+    if ret_val != 'success': return ret_val
+
+    if checkScreen(bzo, startScreen, 1) == True:
+        end_date = (f'        {end_date}')[-8:]
+
+        bzo.WriteScreen('RVOID', 4, 28)
+        bzo.WriteScreen(date, 19, 51)
+        bzo.WriteScreen(date, 20, 51)
+        bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
+
+        if checkScreen(bzo, errScreen, 24) == True: 
+            bzo.SendKey("<PF15>")
+            bzo.WaitReady(10,1)
+
+            return errScreen
+
+        while checkScreen(bzo, endScreen, 24) == False:
+            bzo.SendKey("<Enter>")
+            bzo.WaitReady(10,1)
+
         commit_transaction(bzo)
 
         return 'success'
