@@ -1,9 +1,6 @@
 import data_centers as db
 from datetime import datetime, timedelta
 
-# connect to sql server
-sql_server = db.sql_server
-
 # define formatted date parameters: yesterday = sus format, today = timestamp format
 today = datetime.now().strftime('%Y-%m-%d')
 yesterday = (datetime.now() - timedelta(1)).strftime('%Y%m%d')
@@ -42,6 +39,7 @@ def lead_agreements_created_yesterday():
         WHERE M7EADT = {yesterday}
         AND M7ACAN = 0
         AND M7PPAF = 'PD'
+        AND M7AGTY <> 'NGEL'
         AND M7VAGD NOT LIKE '%VOID%' 
         AND M7VAGD NOT LIKE '%RBB%'
         AND (
@@ -82,6 +80,7 @@ def lead_agreements_created_yesterday():
         WHERE M7EADT = {yesterday}
         AND M7ACAN <> 0
         AND M7PPAF = 'PD'
+        AND M7AGTY <> 'NGEL'
         AND M7VAGD NOT LIKE '%VOID%' 
         AND M7VAGD NOT LIKE '%RBB%'
         AND (
@@ -116,6 +115,7 @@ def lead_agreements_created_yesterday():
         WHERE NHEADT = {yesterday}
         AND NHCVAN = 0
         AND NHPPAF = 'PD'
+        AND NHAGTY <> 'NGEL'
         AND NHCADC NOT LIKE '%VOID%' 
         AND NHCADC NOT LIKE '%RBB%'
         AND (
@@ -125,6 +125,9 @@ def lead_agreements_created_yesterday():
         )
         AND TRIM(DVT500) NOT LIKE '%450'
     ''').fetchall()
+
+    # close sus connection
+    sus.close()
 
     # return list of values
     return rows
@@ -144,16 +147,16 @@ def insert_into_sql_server(dataset, table):
 
             # format chunk of 1000 insert into sql server
             rows = ','.join(str(row) for row in dataset[i:i+1000])
-            sql_server.execute(f'INSERT INTO {table} VALUES{rows}')
+            db.sql_server.execute(f'INSERT INTO {table} VALUES{rows}')
             
         # commit insert statement after all chunks have been loaded in the server
-        sql_server.commit()
+        db.sql_server.commit()
     elif row_count > 0:
 
         # format dataset, insert into sql server and commit
         rows = ','.join(str(row) for row in dataset)
-        sql_server.execute(f'INSERT INTO {table} VALUES{rows}')
-        sql_server.commit()
+        db.sql_server.execute(f'INSERT INTO {table} VALUES{rows}')
+        db.sql_server.commit()
 
 
 # function to pull all customer specs with account ties in alaska and return a list of records.
@@ -223,6 +226,9 @@ def alaska_accounts(dataset):
         'active_specs':active_specs
     }
 
+    # close sus connection
+    sus.close()
+
     return customers
 
 
@@ -236,7 +242,7 @@ def delete_agreements_without_customers(dataset):
 
     # delete all lead agreements where there are no customer specs with account ties in alaska 
     # and commit transaction
-    sql_server.execute(f'''
+    db.sql_server.execute(f'''
         BEGIN TRANSACTION
 
         DELETE 
@@ -270,10 +276,10 @@ def delete_agreements_without_customers(dataset):
 
         COMMIT
     ''')
-    sql_server.commit()
+    db.sql_server.commit()
 
     # get list of <relevent> vendor agreements (va <> 0)
-    va = sql_server.execute(f'''
+    va = db.sql_server.execute(f'''
         SELECT DISTINCT VA
         
         FROM Alaska_Customer_Eligibility
@@ -283,7 +289,7 @@ def delete_agreements_without_customers(dataset):
     ''').fetchall()
 
     # get list of <relevent> customer agreements (ca <> 0)
-    ca = sql_server.execute(f'''
+    ca = db.sql_server.execute(f'''
         SELECT DISTINCT CA
         
         FROM Alaska_Customer_Eligibility
@@ -405,6 +411,9 @@ def agreement_header(agreements):
         WHERE NHCANO IN ({ca})
     ''').fetchall()
 
+    # close sus connection
+    sus.close()
+
     # return dataset with agreement header details
     return rows
 
@@ -504,6 +513,9 @@ def agreement_item_eligibility(agreements):
         WHERE NHCANO IN ({ca})
     ''').fetchall()
 
+    # close sus connection
+    sus.close()
+
     # return dataset with agreement item eligibility details
     return rows
 
@@ -565,6 +577,9 @@ def alaska_items(dataset):
             WHERE TRIM(JFITEM) IN ({items})
         ''').fetchall()
 
+    # close sus connection
+    sus.close()
+
     # return list of alaska items
     return all_items
 
@@ -577,7 +592,7 @@ def delete_agreements_without_items(dataset):
     items = "'" + "','".join(str(row.ITEM) for row in dataset) + "'"
 
     # delete all lead agreements where there are no items in alaska and commit transaction
-    sql_server.execute(f'''
+    db.sql_server.execute(f'''
         BEGIN TRANSACTION
 
             DELETE 
@@ -599,10 +614,10 @@ def delete_agreements_without_items(dataset):
 
         COMMIT
     ''')
-    sql_server.commit()
+    db.sql_server.commit()
 
     # get list of <relevent> vendor agreements (va <> 0)
-    va = sql_server.execute(f'''
+    va = db.sql_server.execute(f'''
         SELECT DISTINCT VA
         
         FROM Alaska_Item_Eligibility
@@ -612,7 +627,7 @@ def delete_agreements_without_items(dataset):
     ''').fetchall()
 
     # get list of <relevent> customer agreements (ca <> 0)
-    ca = sql_server.execute(f'''
+    ca = db.sql_server.execute(f'''
         SELECT DISTINCT CA
         
         FROM Alaska_Item_Eligibility
@@ -635,7 +650,7 @@ def delete_agreements_without_items(dataset):
 def delete_database_records():
 
     # delete all records from the three alaska deviations tables
-    sql_server.execute(f''' 
+    db.sql_server.execute(f''' 
         BEGIN TRANSACTION 
 
         DELETE FROM Alaska_Customer_Eligibility WHERE TIMESTAMP = '{today}'
@@ -645,15 +660,21 @@ def delete_database_records():
         COMMIT
     ''')
 
-
+    
 # function to return all agreement details in sql server in dictionary format
 def deviation_details():
 
+    # get today's date
+    now = datetime.now()
+
     # query all agreement header details and assign to dataset variable
-    header = sql_server.execute(f'''
+    header = db.sql_server.execute(f'''
         SELECT * FROM Alaska_Header
         WHERE TIMESTAMP = '{today}' 
-        AND VA <> '0' 
+        OR (
+            ALASKA_VA IN ('VA10023', 'VA10024')
+            AND DATEFROMPARTS('20' + RIGHT(END_DT,2), LEFT(END_DT,2), RIGHT(LEFT(END_DT,4),2)) >= '{now}'
+        )
         ORDER BY VA, CA
     ''').fetchall()
 
@@ -663,21 +684,17 @@ def deviation_details():
     for agmt in header:
 
         # query all agreement item eligibility details and assign to dataset variable
-        items = sql_server.execute(f'''
+        items = db.sql_server.execute(f'''
             SELECT * FROM Alaska_Item_Eligibility
             WHERE CONCAT(VA,CA) = '{agmt.VA + agmt.CA}' 
-            AND TIMESTAMP = '{today}' 
-            AND VA <> '0' 
-            ORDER BY VA, CA, ITEM
+            ORDER BY ITEM
         ''').fetchall()
 
         # query all agreement customer eligibility details and assign to dataset variable
-        customers = sql_server.execute(f'''
+        customers = db.sql_server.execute(f'''
             SELECT * FROM Alaska_customer_Eligibility
             WHERE CONCAT(VA,CA) = '{agmt.VA + agmt.CA }' 
-            AND TIMESTAMP = '{today}' 
-            AND VA <> '0' 
-            ORDER BY VA, CA, SPEC
+            ORDER BY SPEC
         ''').fetchall()
 
         item_eligibility[agmt.VA + agmt.CA] = items
@@ -688,7 +705,8 @@ def deviation_details():
         'header': header, 
         'item_eligibility': item_eligibility,
         'customer_eligibility': customer_eligibility
-    }
+    }  
+
     return deviations
 
 
@@ -696,7 +714,7 @@ def deviation_details():
 def update_source_vendor():
 
     # update source vendor number in sql server by item
-    sql_server.execute(f'''
+    db.sql_server.execute(f'''
         UPDATE T1
 
         SET T1.SOURCE_VNDR = T2.SOURCE_VNDR
@@ -710,10 +728,10 @@ def update_source_vendor():
     ''')
 
     # commit transactions and complete recordset update
-    sql_server.commit()
+    db.sql_server.commit()
 
     # get list of items sourced from seattle
-    seattle_items = sql_server.execute(f'''
+    seattle_items = db.sql_server.execute(f'''
         SELECT DISTINCT ITEM
 
         FROM Alaska_Item_Eligibility
@@ -721,7 +739,7 @@ def update_source_vendor():
         WHERE SOURCE_VNDR = '4274'
         AND TIMESTAMP = '{today}'
     ''').fetchall()
-
+    
     # return list of items sourced from seattle
     return seattle_items
 
@@ -753,6 +771,9 @@ def seattle_item_details(dataset):
         WHERE TRIM(JFITEM) IN ({items})
     
     ''').fetchall()
+
+    # close sus connection
+    sus.close()
     
     # return list of seattle item details
     return seattle_item_details
@@ -763,7 +784,7 @@ def seattle_item_details(dataset):
 def calculate_alaska_rate():
 
     # update the alaska_item_eligibility table with calculated alaska rate
-    sql_server.execute(f'''
+    db.sql_server.execute(f'''
         BEGIN TRANSACTION 
 
         UPDATE T1
@@ -852,14 +873,14 @@ def calculate_alaska_rate():
     ''')
 
     # commit transaction and update table
-    sql_server.commit()
+    db.sql_server.commit()
 
 
 # function to update sql server with newly created agreements
-def new_agreement(primary_key, va, ca):
+def insert_alaska_agreements(primary_key, va, ca):
 
     # update alaska_header table with newly created agreement numbers
-    sql_server.execute(f'''
+    db.sql_server.execute(f'''
         UPDATE Alaska_Header 
 
         SET ALASKA_VA = '{va}',
@@ -869,14 +890,34 @@ def new_agreement(primary_key, va, ca):
     ''')
 
     # commit transaction 
-    sql_server.commit()
+    db.sql_server.commit()
+
+
+# function to update sql server with newly created agreements
+def update_term_dates(va, end, start=None):
+
+    update_start = ''
+    if start is not None: update_start = f", START_DT = '{start}'"
+
+    # update alaska_header table with newly created agreement numbers
+    db.sql_server.execute(f'''
+        UPDATE Alaska_Header 
+
+        SET END_DT = '{end}'
+        {update_start}
+
+        WHERE ALASKA_VA = '{va}'
+    ''')
+
+    # commit transaction 
+    db.sql_server.commit()
 
 
 # function to delete all seattle sourcing information from sql server
 def delete_seattle_records():
 
     # delete seattle sourcing information from item_source_vendor and seattle_items table
-    sql_server.execute(f'''
+    db.sql_server.execute(f'''
         BEGIN TRANSACTION
 
         DELETE FROM Item_Source_Vendor
@@ -886,7 +927,7 @@ def delete_seattle_records():
     ''')
 
     # commit transaction
-    sql_server.commit()
+    db.sql_server.commit()
 
 
 # function to clear zoned agreements from sql server. Look at agreements with matching items
@@ -894,7 +935,7 @@ def delete_seattle_records():
 def clear_zoned_agreements():
 
     # get zoned agreements from 
-    zoned_agreements = sql_server.execute(f'''
+    zoned_agreements = db.sql_server.execute(f'''
         SELECT DISTINCT CONCAT(HEADER.VA,HEADER.CA) AS ZONED
 
         FROM (
@@ -944,7 +985,7 @@ def clear_zoned_agreements():
         zoned = "'" + "','".join(str(row.ZONED) for row in zoned_agreements) + "'"
 
         # remove all zoned agreements from sql server
-        sql_server.execute(f'''
+        db.sql_server.execute(f'''
             BEGIN TRANSACTION
 
             DELETE FROM ALASKA_HEADER WHERE CONCAT(VA, CA) IN ({zoned})
@@ -955,14 +996,14 @@ def clear_zoned_agreements():
         ''')
 
         # commit transaction
-        sql_server.commit()
+        db.sql_server.commit()
 
 
 # function to return all vendors that either need to be pulled into alaska or require vadam ties. 
 def vadam_ties():
 
     # query vendors for agreements that could not be created from *todays job
-    vendors = sql_server.execute(f'''
+    vendors = db.sql_server.execute(f'''
         SELECT DISTINCT VENDOR_NBR 
 
         FROM Alaska_Header
@@ -981,7 +1022,7 @@ def active_agreements():
     # get today's date
     now = datetime.now()
 
-    agreements = sql_server.execute(f'''
+    agreements = db.sql_server.execute(f'''
         SELECT
         RIGHT('00000' + VA, 9) AS VA, 
         ALASKA_VA
@@ -1031,6 +1072,9 @@ def changed_agreements_header(agreements):
         AND O6CHFN IN ('M7VASD','M7VAED')
         AND O6ENNM IN ({active_agreements})
     ''').fetchall()
+
+    # close sus connection
+    sus.close()
 
     return changed_agreements
 
@@ -1109,10 +1153,7 @@ def upload_alaska_deviations():
         #print('no deviatinos to upload')
 
 
-
-
-def update_ended_deals():
-
+def get_updated_agreements():
 
     # get list of all active lead agreement w/ local agreement keyed by alaska. 
     bot_agreements = active_agreements()
@@ -1126,18 +1167,13 @@ def update_ended_deals():
     # create dictionary of updated agreements using the alaska va as the key
     compiled_updates = {}
     for agreement in updated_agreements:
-
+        
         va = agreement_reference[agreement.VA]
         field = agreement.FIELD
         value = str(agreement.VALUE)
 
-        if va not in compiled_updates: compiled_updates[va] = {'field': [], 'value': []}
-        
-        compiled_updates[va]['field'].append(field)
-        compiled_updates[va]['value'].append(value)
+        if va not in compiled_updates: compiled_updates[va] = {}
 
-    print(compiled_updates)
+        compiled_updates[va][field] = value
 
-
-
-
+    return compiled_updates

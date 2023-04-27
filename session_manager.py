@@ -49,9 +49,14 @@ def connect():
 
 
 def quick_access_va(bzo):
-    screen = "Vendor Agreement Maintenance"
+    ca_screen = 'Customer Agreement Maintenance'
+    end_screen = "Vendor Agreement Maintenance"
 
-    if checkScreen(bzo, screen, 1) == False:
+    if checkScreen(bzo, ca_screen, 1) == True:
+        bzo.SendKey("<PF3>")
+        bzo.WaitReady(10,1)
+
+    if checkScreen(bzo, end_screen, 1) == False:
         bzo.WaitReady(10,1)
         bzo.SendKey("<PF10>")
         bzo.WaitReady(10,1)
@@ -59,7 +64,7 @@ def quick_access_va(bzo):
         bzo.SendKey("<Enter>")
         bzo.WaitReady(10,1)
 
-        while checkScreen(bzo, screen, 1) == False:
+        while checkScreen(bzo, end_screen, 1) == False:
             time.sleep(0.3)
 
 
@@ -110,7 +115,28 @@ def create_va(bzo, type, vendor):
 
         return va
 
-#######################################################################################
+
+def create_ca(bzo, type, rebate_type):
+    startScreen = "Customer Agreement Maintenance"
+    endScreen = "Customer Agreement Header (Allowance)"
+    ca = ''
+
+    if checkScreen(bzo, startScreen, 1) == True:
+        bzo.WriteScreen(type, 11, 48)
+        bzo.WriteScreen(rebate_type, 13, 48)
+        bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
+        bzo.SendKey("<PF6>")
+        bzo.WaitReady(10,1)
+
+        while checkScreen(bzo, endScreen, 2) == False:
+            time.sleep(0.3)
+
+        ca = bzo.ReadScreen(ca, 9, 4, 21)[1]
+
+        return ca
+
+
 def maintain_va(bzo, va):
     startScreen = "Vendor Agreement Maintenance"
     endScreen = "Agreement Header"
@@ -129,7 +155,7 @@ def maintain_va(bzo, va):
         return 'success'
 
 
-def end_agreement(bzo, va, end_date):
+def end_vendor_agreement(bzo, va, end_date):
     startScreen = "Agreement Header"
     endScreen = "Press F7 to Update, F3 to Exit, or F15 to return to prompt."
     errScreen = "Invalid date; must be in MMDDYY format."
@@ -138,7 +164,7 @@ def end_agreement(bzo, va, end_date):
 
     if ret_val != 'success': return ret_val
 
-    if checkScreen(bzo, startScreen, 1) == True:
+    if checkScreen(bzo, startScreen, 2) == True:
         end_date = (f'        {end_date}')[-8:]
 
         bzo.WriteScreen(end_date, 20, 51)
@@ -191,9 +217,7 @@ def retro_void_agreement(bzo, va, date):
         commit_transaction(bzo)
 
         return 'success'
-#######################################################################################
 
-        
 
 def va_general_agreement_information(bzo, description, pastDueDeduct, costBasis, caType, rebateType, start, end):
     startScreen = 'General Agreement Information'
@@ -227,18 +251,42 @@ def va_general_agreement_information(bzo, description, pastDueDeduct, costBasis,
                 bzo.WaitReady(10,1)
 
 
-def va_billing_information(bzo, billingFreq1, billingFreq2, billBackFormat, preApproval, corporateClaimed, appropName):
+def ca_general_agreement_information(bzo, description, billing_freq, billing_day, approp_name, start, end):
+    startScreen = 'General Agreement Information'
+    endScreen = 'Customer Agreement Item Eligibility (Allowance)'
+
+    if checkScreen(bzo, startScreen, 8) == True:
+        if len(description) > 30: description = description[-30:]
+        start = (f'        {start}')[-8:]
+        end = (f'        {end}')[-8:]
+        billing_day = (f'  {billing_day}')[-2:]
+        
+        bzo.WriteScreen(description, 4, 32)
+        bzo.WriteScreen('CORP', 9, 25)
+        bzo.WriteScreen(billing_freq, 10, 25)
+        bzo.WriteScreen(billing_day, 10, 29)
+        bzo.WriteScreen(approp_name, 14, 25)
+        bzo.WriteScreen(start, 17, 28)
+        bzo.WriteScreen(end, 18, 28)
+
+        bzo.SendKey("<Enter>")
+        bzo.WaitReady(10,1)
+
+        while checkScreen(bzo, endScreen, 2) == False:
+            time.sleep(0.3)
+          
+
+def va_billing_information(bzo, billing_freq, billing_day, billBackFormat, preApproval, corporateClaimed, appropName):
     startScreen = 'Billing Information'
     warningScreen = 'Warning: Changes will trigger retro processing.'
     nextScreen = 'Agreement Address/Codes'
     endScreen = 'Item Eligibility'
-    
 
     if checkScreen(bzo, startScreen, 8) == True:
-        billingFreq2 = (f'  {billingFreq2}')[-2:]
+        billing_day = (f'  {billing_day}')[-2:]
 
-        bzo.WriteScreen(billingFreq1, 9, 24)
-        bzo.WriteScreen(billingFreq2, 9, 28)
+        bzo.WriteScreen(billing_freq, 9, 24)
+        bzo.WriteScreen(billing_day, 9, 28)
         bzo.WriteScreen(billBackFormat, 9, 66)
         bzo.WriteScreen(preApproval, 10, 30)
         bzo.WriteScreen(corporateClaimed, 14, 27)
@@ -340,6 +388,9 @@ def ca_item_eligibility(bzo, items):
 
         row = 12
         for item in items:
+            bzo.WriteScreen('A', row, 6)
+            bzo.WriteScreen('SUPC', row, 8)
+            bzo.WriteScreen(item.ITEM, row, 13)
             bzo.WriteScreen(item.CA_REBATE_BASIS, row, 33)
             bzo.WriteScreen('         ', row, 36)
             bzo.WriteScreen(item.CA_ALLOWANCE, row, 36)

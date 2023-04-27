@@ -1,80 +1,166 @@
 import session_manager as bz
 
-from data_pull import upload_alaska_deviations, deviation_details, new_agreement
+from data_pull import upload_alaska_deviations, deviation_details, insert_alaska_agreements, get_updated_agreements, update_term_dates
 from outlook import send_vadam_request
 
-
-# load list of alaska deviations 
-#deviations = upload_alaska_deviations()
-deviations =  deviation_details()
-header = deviations['header']
-itemEligibility = deviations['item_eligibility']
-customerEligibility = deviations['customer_eligibility']
-
-# open an blank bluezone session
+# open a global bluezone session
 session = bz.connect()
 
-# loop through header list - one iteration per agreement
-for agmt in header:
 
-    # set agreement number variables to 0
-    va = '0'
+def load_vendor_agreement(header, item_elig, customer_elig):
+
+    # go to quick access va
+    bz.quick_access_va(session)
+
+    # create new agreement
+    va = bz.create_va(session, header.VA_TYPE, header.VENDOR_NBR)
+
+    # key geenral agreement informatoin screen
+    bz.va_general_agreement_information(
+        session, 
+        header.DESCRIPTION, 
+        header.PAST_DUE_DEDUCT, 
+        header.ALASKA_COST_BASIS, 
+        header.CA_TYPE, 
+        header.REBATE_TYPE, 
+        header.START_DT, 
+        header.END_DT
+    )
+
+    # key billing information screen
+    bz.va_billing_information(
+        session, 
+        header.BILLING_FREQ, 
+        header.BILLING_DAY, 
+        header.BILLBACK_FORMAT, 
+        header.PRE_APPROVAL, 
+        header.CORP_CLAIMED, 
+        header.APPROP_NAME
+    )
+
+    # key va item eligibility
+    bz.va_item_eligibility(session, item_elig)
+
+    # key customer eligibility if billbacks are allowed
+    bz.va_customer_eligibility(session, customer_elig)
+
+    # continue through agreement creation if there is a customer side of the agreement then 
     ca = '0'
+    if header.CA_TYPE != '':
+        
+        # key ca item eligibility
+        bz.ca_item_eligibility(session, item_elig)
 
-    # handle vendor and customer agreements differently
-    if agmt.VA != '0':
+        # key ca customer eligibility return ca number
+        ca = bz.ca_customer_eligibility(session, customer_elig)
 
-        # go to quick access va
-        bz.quick_access_va(session)
+    # return agreement numbers
+    return {'VA':va, 'CA':ca}
 
-        # create new agreement
-        va = bz.create_va(session, agmt.VA_TYPE, agmt.VENDOR_NBR)
 
-        # key geenral agreement informatoin screen
-        bz.va_general_agreement_information(session, agmt.DESCRIPTION, agmt.PAST_DUE_DEDUCT, agmt.ALASKA_COST_BASIS, agmt.CA_TYPE, agmt.REBATE_TYPE, agmt.START_DT, agmt.END_DT)
+def load_customer_agreement(header, item_elig, customer_elig):
 
-        # key billing information screen
-        bz.va_billing_information(session, agmt.BILLING_FREQ, agmt.BILLING_DAY, agmt.BILLBACK_FORMAT, agmt.PRE_APPROVAL, agmt.CORP_CLAIMED, agmt.APPROP_NAME)
+    # go to quick access va
+    bz.quick_access_ca(session)
 
-        # key va item eligibility
-        bz.va_item_eligibility(session, itemEligibility[agmt.VA + agmt.CA])
+    # create new agreement
+    ca = bz.create_ca(session, header.CA_TYPE, header.REBATE_TYPE)
 
-        # key customer eligibility if billbacks are allowed
-        bz.va_customer_eligibility(session, customerEligibility[agmt.VA + agmt.CA])
+    # key geenral agreement informatoin screen
+    bz.ca_general_agreement_information(
+        session, 
+        header.DESCRIPTION, 
+        header.BILLING_FREQ, 
+        header.BILLING_DAY, 
+        header.APPROP_NAME, 
+        header.START_DT, 
+        header.END_DT
+    )
 
-        # continue through agreement creation if there is a customer side of the agreement then 
-        if agmt.CA_TYPE != '':
+    # key va item eligibility
+    bz.ca_item_eligibility(session, item_elig)
+
+    # key customer eligibility if billbacks are allowed
+    bz.ca_customer_eligibility(session, customer_elig)
+        
+    # key ca item eligibility
+    bz.ca_item_eligibility(session, item_elig)
+
+    # key ca customer eligibility return ca number
+    bz.ca_customer_eligibility(session, customer_elig)
+
+    # return agreement numbers
+    return {'VA':'0', 'CA':ca}
+
+
+def load_alaska_agreements():   
+
+    # load list of alaska deviations 
+    #deviations = upload_alaska_deviations()
+    deviations = deviation_details()
+    all_header = deviations['header']
+    all_item_elig = deviations['item_eligibility']
+    all_customer_elig = deviations['customer_eligibility']
+    agreements = []
+
+    # loop through header list - one iteration per agreement
+    for header in all_header:
+
+        lead_va = header.VA
+        lead_ca = header.CA
+        id = lead_va + lead_ca
+        item_elig = all_item_elig[id]
+        customer_elig = all_customer_elig[id]
+        
+        # handle vendor and customer agreements differently
+        if lead_va != '0':
+            agreements.append(load_vendor_agreement(header, item_elig, customer_elig))
+        else:
+            agreements.append(load_customer_agreement(header, item_elig, customer_elig))
             
-            # key ca item eligibility
-            bz.ca_item_eligibility(session, itemEligibility[agmt.VA + agmt.CA])
+        # update (F7) agreement 
+        bz.commit_transaction(session)
 
-            # key ca customer eligibility return ca number
-            ca = bz.ca_customer_eligibility(session, customerEligibility[agmt.VA + agmt.CA])
-    else:
-        
-        # go to quick access ca
-        bz.quick_access_ca(session)
+        # send alaska agreements to server
+        alaska_va = agreements[-1]['VA']
+        alaska_ca = agreements[-1]['CA']
+        insert_alaska_agreements(header.PRIMARY_KEY, alaska_va, alaska_ca)
 
-        # create new agreement
-        ca = bz.create_va(session, agmt.CA_TYPE)
+    return agreements
 
-    # update (F7) agreement and save to server
-    bz.commit_transaction(session)
-    new_agreement(agmt.PRIMARY_KEY, va, ca)
 
-    # end modified agreements 
+def update_alaska_agreements():
+
+    bz.quick_access_va(session)
+
+    updates = get_updated_agreements()
     
+    for update in updates:
 
-    print(f'va:{va}\nca:{ca}')
+        # voids
+        if 'END DTE' in updates[update] and 'STR DTE' in updates[update]:
+            print('VOID')
+        elif 'END DTE' in updates[update]:
+            bz.end_vendor_agreement(session, update, updates[update]['END DTE'])
+            print(update, updates[update]['END DTE'])
+            update_term_dates(update, updates[update]['END DTE'])
 
-# close bluezone sessioon
-bz.disconnect(session)
 
-# send all vadam tie requests to west market field
-send_vadam_request()
+if __name__ == "__main__":
 
+    # load new agreements keyed yesterday by DPM
+    agreements = load_alaska_agreements()
 
-    
+    # update alaska agreements to align with an updated lead agreement
+    update_alaska_agreements()
 
-    
-        
+    # close bluezone sessioon
+    bz.disconnect(session)
+
+    # send all vadam tie requests to west market field
+    send_vadam_request()
+
+'''
+I have ending vendor agreements configured, but not customer agreements
+and not voids
+'''
