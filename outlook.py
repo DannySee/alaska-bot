@@ -28,7 +28,7 @@ def send_vadam_request():
         EXEC msdb.dbo.sp_send_dbmail
             @profile_name = @MailProfile,
             @recipients = @Recipients,
-            @blind_copy_recipients = 'daniel.clark@sysco.com
+            @blind_copy_recipients = 'daniel.clark@sysco.com',
             @subject = @Subject,
             @body = @Body,
             @file_attachments = @Attachment;
