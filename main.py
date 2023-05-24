@@ -1,6 +1,6 @@
 import session_manager as bz
 
-from data_pull import upload_alaska_deviations, deviation_details, insert_alaska_agreements, get_updated_agreements, update_term_dates
+from data_pull import upload_alaska_deviations, insert_alaska_agreements, get_updated_agreements, update_term_dates
 from outlook import send_vadam_request
 
 # open a global bluezone session
@@ -97,7 +97,7 @@ def load_alaska_agreements():
 
     # load list of alaska deviations 
     #deviations = upload_alaska_deviations()
-    deviations = deviation_details()
+    deviations = upload_alaska_deviations()
     all_header = deviations['header']
     all_item_elig = deviations['item_eligibility']
     all_customer_elig = deviations['customer_eligibility']

@@ -40,3 +40,4 @@ def send_vadam_request():
 
         # Erase file
         os.remove(attachment)
+
