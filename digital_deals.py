@@ -32,7 +32,7 @@ def lead_agreements_created_yesterday():
         ON RIGHT('000' || M7VAGN, 9) = AZCEEN 
         AND AZCEAI = 'VA ' 
 
-        WHERE M7EADT > 20230401
+        WHERE M7EADT = {yesterday}
         AND M7ACAN = 0
         AND M7VAGD NOT LIKE '%VOID%' 
         AND M7AGRN = 999999999
@@ -61,7 +61,7 @@ def lead_agreements_created_yesterday():
         AND T2.AZCEAI = 'VA ' 
         AND T1.AZPCSP = T2.AZPCSP
 
-        WHERE M7EADT > 20230401
+        WHERE M7EADT = {yesterday}
         AND M7ACAN <> 0
         AND M7VAGD NOT LIKE '%VOID%' 
         AND M7AGRN = 999999999
@@ -952,7 +952,7 @@ def changed_agreements_header(agreements):
 
 # function to pull all lead agreements created <yesterday>, and store the agreements that have 
 # customer specs with account ties in alaska in sql serer table alaska_customer_eligibility.
-def upload_alaska_deviations():
+def upload_digital_deals():
 
     # get list of all agreements created yesterday with customer detail
     all_agreements = lead_agreements_created_yesterday()
@@ -1048,148 +1048,3 @@ def get_updated_agreements():
         compiled_updates[va][field] = value
 
     return compiled_updates
-
-
-
-def correct_spec_code():
-
-    excludes = db.sql_server.execute(f'''
-        SELECT 
-        CONCAT(VA,CA) AS AGMT,
-        SPEC
-
-        FROM ALASKA_CUSTOMER_ELIGIBILITY
-
-        WHERE TIMESTAMP = '{today}' 
-        AND IEA = 'E'
-    ''').fetchall()
-
-    agreement_elig = {}
-    for exclude in excludes:
-        if exclude.AGMT not in agreement_elig: agreement_elig[exclude.AGMT] = {'E': [], 'U': []}
-        agreement_elig[exclude.AGMT]['E'].append(exclude.SPEC)
-
-    subscriptions = db.sql_server.execute(f'''
-        SELECT 
-        CONCAT(VA,CA) AS AGMT,  
-        SPEC
-
-        FROM ALASKA_CUSTOMER_ELIGIBILITY
-
-        WHERE TIMESTAMP = '{today}' 
-        AND IEA = 'U'
-    ''').fetchall()
-
-    for subscription in subscriptions:
-        agreement_elig[subscription.AGMT]['U'].append(subscription.SPEC)
-
-    sus = db.sus('450')
-
-    for agreement in agreement_elig:
-
-        print(f'va: {agreement}')
-
-        exclude = "'" + "','".join(str(row) for row in agreement_elig[agreement]['E']) + "'"
-
-        print(f'exclude: {exclude}')
-
-        excluded_customers = sus.execute(f'''
-            SELECT DISTINCT TRIM(AZPCSP) AS CST
-
-            FROM SCDBFP10.USCNAZL0 
-
-            WHERE TRIM(AZCEEN) IN ({exclude}) 
-            AND AZEFED >= 20230430
-            AND AZCEAI = 'GRP' 
-        
-            UNION 
-
-            SELECT DISTINCT TRIM(JTFPAR) AS CST
-
-            FROM SCDBFP10.USCKJTPF
-
-            WHERE TRIM(JTHIMA) IN ({exclude})
-            AND JTTTYP = 'PRNT'
-            AND JTFTYP NOT IN ('PRNT','MSTR')
-            AND JTTEDT >= 20230430
-
-            UNION 
-
-            SELECT DISTINCT TRIM(JTFPAR) AS CST
-
-            FROM SCDBFP10.USCKJTPF
-
-            WHERE TRIM(JTTPAR) IN ({exclude})
-            AND JTTTYP = 'PRNT'
-            AND JTFTYP NOT IN ('PRNT','MSTR')
-            AND JTTEDT >= 20230430
-        ''').fetchall()
-
-        exclude_list = [str(row.CST) for row in excluded_customers]
-
-        print(f'exclude list: {exclude_list}')
-
-        subscribed = "'" + "','".join(str(row) for row in agreement_elig[agreement]['U']) + "'"
-
-        print(f'subscribed: {subscribed}')
-
-        subscribed_customers = sus.execute(f'''
-            SELECT DISTINCT TRIM(AZPCSP) AS SHP, TRIM(AZCEEN) AS SPEC
-
-            FROM SCDBFP10.USCNAZL0 
-
-            WHERE TRIM(AZCEEN) IN ({subscribed}) 
-            AND AZEFED >= 20230430
-            AND AZCEAI = 'GRP' 
-        
-            UNION 
-
-            SELECT DISTINCT TRIM(JTFPAR) AS SHP, TRIM(JTHIMA) AS SPEC
-
-            FROM SCDBFP10.USCKJTPF
-
-            WHERE TRIM(JTHIMA) IN ({subscribed})
-            AND JTTTYP = 'PRNT'
-            AND JTFTYP NOT IN ('PRNT','MSTR')
-            AND JTTEDT >= 20230430
-
-            UNION 
-
-            SELECT DISTINCT TRIM(JTFPAR) AS SHP, TRIM(JTTPAR) AS SPEC
-
-            FROM SCDBFP10.USCKJTPF
-
-            WHERE TRIM(JTTPAR) IN ({subscribed})
-            AND JTTTYP = 'PRNT'
-            AND JTFTYP NOT IN ('PRNT','MSTR')
-            AND JTTEDT >= 20230430
-        ''').fetchall()
-
-        for customer in subscribed_customers:
-
-            print(f'SUBSPEC: {customer.SHP}')
-
-            if customer.SHP in exclude_list: 
-                db.sql_server.execute(F'''
-                    UPDATE ALASKA_CUSTOMER_ELIGIBILITY 
-                    SET IEA = 'I'
-                    WHERE CONCAT(VA, CA) = '{agreement}'
-                    AND TIMESTAMP = '{today}'
-                    AND SPEC = '{customer.SPEC}'
-                ''')
-        
-        db.sql_server.execute(F'''
-            UPDATE ALASKA_CUSTOMER_ELIGIBILITY 
-            SET IEA = 'A'
-            WHERE CONCAT(VA, CA) = '{agreement}'
-            AND TIMESTAMP = '{today}'
-            AND SPEC_CODE = 'U'
-        ''')
-    
-    db.sql_server.commit()
-
-
-
-
-
-

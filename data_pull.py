@@ -1,4 +1,6 @@
 import data_centers as db
+import digital_deals as dgd
+
 from datetime import datetime, timedelta, date
 
 # define formatted date parameters: yesterday = sus format, today = timestamp format
@@ -1147,6 +1149,9 @@ def upload_alaska_deviations():
 
     # remove zoned agreements where seattle is not in distribution list
     clear_zoned_agreements()
+
+    # upload digital deals
+    dgd.upload_digital_deals()
 
     # get dictionary of agreement criteria for return. dictionary to include agreement header, item, and customer detail
     deviations = deviation_details()
