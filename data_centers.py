@@ -1,6 +1,5 @@
 import pyodbc
 
-# sql server connection properties
 sql_server = pyodbc.connect(
     driver='{SQL Server}',
     server='MS248CSSQL01.SYSCO.NET',
@@ -75,6 +74,7 @@ site_names = {
     '164': '164 - Gulf Coast',
     '194': '194 - Central Illinois (Roberts)',
     '195': '195 - North Dakota',
+    '240': '240 - Corporate',
     '288': '288 - Knoxville',
     '293': '293 - East Texas',
     '306': '306 - Long Island',
@@ -83,6 +83,84 @@ site_names = {
     '344': '344 - Intl Food Group (IFG)-Jacksonville',
     '429': '429 - Doerle',
     '450': '450 - Alaska (NO DPM)'
+}
+
+# dictionary of all opsites 3 (key=3 digit number, value=3 digit number + name)
+site_markets = {
+    '001': 'SOUTH',
+    '002': 'SOUTH',
+    '003': 'SOUTH',
+    '004': 'WEST',
+    '005': 'WEST',
+    '006': 'SOUTH',
+    '007': 'NORTH',
+    '008': 'NORTH',
+    '009': 'NORTH',
+    '010': 'SOUTH',
+    '011': 'NORTH',
+    '012': 'NORTH',
+    '013': 'SOUTH',
+    '014': 'SOUTH',
+    '015': 'NORTH',
+    '016': 'SOUTH',
+    '017': 'WEST',
+    '018': 'NORTH',
+    '019': 'NORTH',
+    '022': 'SOUTH',
+    '023': 'SOUTH',
+    '024': 'NORTH',
+    '025': 'NORTH',
+    '026': 'SOUTH',
+    '027': 'NORTH',
+    '029': 'SOUTH',
+    '031': 'WEST',
+    '032': 'SOUTH',
+    '035': 'NORTH',
+    '036': 'WEST',
+    '037': 'SOUTH',
+    '038': 'NORTH',
+    '039': 'NORTH',
+    '040': 'WEST',
+    '043': 'WEST',
+    '045': 'WEST',
+    '046': 'SOUTH',
+    '047': 'NORTH',
+    '048': 'SOUTH',
+    '049': 'WEST',
+    '050': 'WEST',
+    '051': 'NORTH',
+    '052': 'WEST',
+    '054': 'NORTH',
+    '055': 'WEST',
+    '056': 'NORTH',
+    '057': 'WEST',
+    '058': 'NORTH',
+    '059': 'WEST',
+    '060': 'SOUTH',
+    '061': 'WEST',
+    '064': 'NORTH',
+    '066': 'WEST',
+    '067': 'SOUTH',
+    '068': 'NORTH',
+    '073': 'SOUTH',
+    '075': 'NORTH',
+    '076': 'NORTH',
+    '078': 'SOUTH',
+    '101': 'WEST',
+    '102': 'WEST',
+    '137': 'SOUTH',
+    '163': 'SOUTH',
+    '164': 'SOUTH',
+    '194': 'NORTH',
+    '195': 'NORTH',
+    '240': 'CORP',
+    '288': 'SOUTH',
+    '293': 'SOUTH',
+    '306': 'NORTH',
+    '320': 'WEST',
+    '332': 'NORTH',
+    '429': 'SOUTH', 
+    '450': 'WEST'
 }
 
 # list of all north market sites (3 digit numbers)
@@ -107,9 +185,10 @@ all_sites = site_names.keys()
 # function to establish connection to sus and return sus object
 def sus(site):
     cnn_sus = pyodbc.connect(
-        DRIVER='{IBM i Access ODBC Driver}',
-        SYSTEM=f'AS{site}A',
-        SIGNON=4,
+        driver='{iSeries Access ODBC Driver}',
+        system=f'AS{site}ATO.na.sysco.net',
+        UID='MUDAC000',
+        PWD='ZXCVBN4567',
         TRANSLATE=1,
         TRANSLATE_BINARY=True)
 
