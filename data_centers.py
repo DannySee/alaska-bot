@@ -107,10 +107,11 @@ all_sites = site_names.keys()
 # function to establish connection to sus and return sus object
 def sus(site):
     cnn_sus = pyodbc.connect(
-        driver='{iSeries Access ODBC Driver}',
-        system=f'AS{site}A',
-        uid='MULCH000',
-        pwd='BIGWHITE23')
+        DRIVER='{IBM i Access ODBC Driver}',
+        SYSTEM=f'AS{site}A',
+        SIGNON=4,
+        TRANSLATE=1,
+        TRANSLATE_BINARY=True)
 
     return cnn_sus
 

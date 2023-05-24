@@ -1,5 +1,5 @@
 import data_centers as db
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 # define formatted date parameters: yesterday = sus format, today = timestamp format
 today = datetime.now().strftime('%Y-%m-%d')
@@ -168,6 +168,8 @@ def alaska_accounts(dataset):
     # format sql string of all customer specs on agreements loaded <yesterday>
     specs = "'" + "','".join(str(row.SPEC) for row in dataset) + "'"
 
+    now = datetime.now().strftime('%Y%m%d')
+
     # pull all customer specs with account ties in alaska
     active_ties = sus.execute(f'''
         SELECT DISTINCT TRIM(AZCEEN) AS SPEC
@@ -175,7 +177,7 @@ def alaska_accounts(dataset):
         FROM SCDBFP10.USCNAZL0 
 
         WHERE TRIM(AZCEEN) IN ({specs}) 
-        AND AZEFED >= {today}
+        AND AZEFED >= {now}
         AND AZCEAI = 'GRP' 
     
         UNION 
@@ -187,7 +189,7 @@ def alaska_accounts(dataset):
         WHERE TRIM(JTHIMA) IN ({specs})
         AND JTTTYP = 'PRNT'
         AND JTFTYP NOT IN ('PRNT','MSTR')
-        AND JTTEDT >= {today}
+        AND JTTEDT >= {now}
 
         UNION 
 
@@ -198,7 +200,7 @@ def alaska_accounts(dataset):
         WHERE TRIM(JTTPAR) IN ({specs})
         AND JTTTYP = 'PRNT'
         AND JTFTYP NOT IN ('PRNT','MSTR')
-        AND JTTEDT >= {today}
+        AND JTTEDT >= {now}
     ''').fetchall()
 
     # pull all customer specs that exist in alaska
@@ -361,7 +363,8 @@ def agreement_header(agreements):
         '{today}' AS TIMESTAMP, 
         '' AS ALASKA_VA,
         '' AS ALASKA_CA,
-        CASE WHEN DVT500 LIKE '%055%' THEN 'YES' ELSE 'NO' END AS SEATTLE_DIST
+        CASE WHEN DVT500 LIKE '%055%' THEN 'YES' ELSE 'NO' END AS SEATTLE_DIST,
+        'NEW' AS CHANGE_CODE
 
         FROM SCDBFP10.PMVHM7PF
 
@@ -400,7 +403,8 @@ def agreement_header(agreements):
         '{today}' AS TIMESTAMP,
         '' AS ALASKA_VA,
         '' AS ALASKA_CA,
-        CASE WHEN DVT500 LIKE '%055%' THEN 'YES' ELSE 'NO' END AS SEATTLE_DIST
+        CASE WHEN DVT500 LIKE '%055%' THEN 'YES' ELSE 'NO' END AS SEATTLE_DIST,
+        'NEW' AS CHANGE_CODE
 
         FROM SCDBFP10.PMPVNHPF
 
@@ -665,7 +669,7 @@ def delete_database_records():
 def deviation_details():
 
     # get today's date
-    now = datetime.now()
+    now = date.today()
 
     # query all agreement header details and assign to dataset variable
     header = db.sql_server.execute(f'''
@@ -894,7 +898,10 @@ def insert_alaska_agreements(primary_key, va, ca):
 
 
 # function to update sql server with newly created agreements
-def update_term_dates(va, end, start=None):
+def update_term_dates(va, change, end, start=None):
+
+    # get today's date
+    now = date.today()
 
     update_start = ''
     if start is not None: update_start = f", START_DT = '{start}'"
@@ -903,7 +910,9 @@ def update_term_dates(va, end, start=None):
     db.sql_server.execute(f'''
         UPDATE Alaska_Header 
 
-        SET END_DT = '{end}'
+        SET END_DT = '{end}',
+        TIMESTAMP = '{now}',
+        CHANGE_CODE = '{change}'
         {update_start}
 
         WHERE ALASKA_VA = '{va}'
@@ -1020,7 +1029,7 @@ def vadam_ties():
 def active_agreements():
 
     # get today's date
-    now = datetime.now()
+    now = date.today()
 
     agreements = db.sql_server.execute(f'''
         SELECT
@@ -1177,3 +1186,4 @@ def get_updated_agreements():
         compiled_updates[va][field] = value
 
     return compiled_updates
+

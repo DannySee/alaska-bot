@@ -142,8 +142,7 @@ def update_alaska_agreements():
             print('VOID')
         elif 'END DTE' in updates[update]:
             bz.end_vendor_agreement(session, update, updates[update]['END DTE'])
-            print(update, updates[update]['END DTE'])
-            update_term_dates(update, updates[update]['END DTE'])
+            update_term_dates(update, 'END DTE', updates[update]['END DTE'])
 
 
 if __name__ == "__main__":
@@ -160,7 +159,17 @@ if __name__ == "__main__":
     # send all vadam tie requests to west market field
     send_vadam_request()
 
+
+'''
+i want to change the upload_alaska_agreements() function to also update 
+the timestamp and change code of updated agreements. That way, 
+the query can just handle new and updated agreements accordingly
+create dictionary of actions with 'NEW' and 'CHANGE' as the keys 
+including subsequent dictionaries 
+'''
+
 '''
 I have ending vendor agreements configured, but not customer agreements
 and not voids
 '''
+
