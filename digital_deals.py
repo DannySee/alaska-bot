@@ -1014,7 +1014,7 @@ def upload_digital_deals():
     #deviations = deviation_details()
 
     # print successful message and return dictionary
-    print('upload complete')
+    print('digital deals upload complete')
     return
     #except:
 
