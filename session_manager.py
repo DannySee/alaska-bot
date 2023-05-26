@@ -27,7 +27,7 @@ def connect():
     pythoncom.CoInitialize()
     bzo = win32com.client.Dispatch("BZWhll.WhllObj")
 
-    bzo.OpenSession(1, 26, "SUSSSO", 30, 1)
+    bzo.OpenSession(1, 26, "SUS", 30, 1)
     bzo.Connect("Z")
     bzo.SendKey("<f3><enter>")
     bzo.WaitReady(10, 0)
@@ -36,7 +36,7 @@ def connect():
     time.sleep(0.3)
 
     host = "SUS450.na.sysco.net"
-    port = "992"
+    port = "23"
 
     bzo.HostName = host
     bzo.TelnetPort = port

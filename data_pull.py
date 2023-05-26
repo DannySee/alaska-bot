@@ -1191,4 +1191,3 @@ def get_updated_agreements():
         compiled_updates[va][field] = value
 
     return compiled_updates
-
