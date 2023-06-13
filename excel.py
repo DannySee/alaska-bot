@@ -2,6 +2,7 @@ import os
 import pandas as pd
 
 
+# create excel file and return path
 def create_excel(vendors):
     filename = 'Alaska VADAM Ties.xlsx'
     writer = pd.ExcelWriter(filename)

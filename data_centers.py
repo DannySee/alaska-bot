@@ -98,7 +98,7 @@ west_market = ['004', '005', '017', '031', '036', '040', '043', '045', '049', '0
 all_sites = site_names.keys()
 
 
-# function to establish connection to sus and return sus object
+# establish connection to sus and return object
 def sus(site):
     cnn_sus = pyodbc.connect(
         DRIVER='{IBM i Access ODBC Driver}',
@@ -110,7 +110,7 @@ def sus(site):
     return cnn_sus
 
 
-# sql server connection properties
+# establish connection to sql server and return object
 def sql_server():
     server = pyodbc.connect(
         driver='{SQL Server}',

@@ -1,8 +1,7 @@
 import sql
 import session_manager as bz
-import digital_deals as dgd
 
-from data_pull import upload_alaska_deviations, deviation_details, database_command, get_updated_agreements, update_term_dates
+from data_pull import upload_alaska_deviations, database_command, database_query, get_updated_agreements
 from outlook import send_vadam_request
 
 # open a global bluezone session
@@ -167,7 +166,7 @@ if __name__ == "__main__":
     bz.disconnect(session)
 
     # send all vadam tie requests to west market field
-    send_vadam_request()
+    send_vadam_request(database_query(sql.get_vendor_errors))
 
 
 '''

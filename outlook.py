@@ -1,15 +1,15 @@
-from data_pull import vadam_ties
 from excel import create_excel
 
 import win32com.client
 
+# create outlook object
 outlook = win32com.client.Dispatch('outlook.application')
 mail = outlook.CreateItem(0)
 
 
-def send_vadam_request():
+# send vadam tie request to west market based on agreements failed due to vendor errors
+def send_vadam_request(vendors):
 
-    vendors = vadam_ties()
     if len(vendors) > 0:
         vendors = [int(vendor[0]) for vendor in vendors]
         vendorList = ",\n".join(str(vendor) for vendor in vendors)

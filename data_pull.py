@@ -1,12 +1,6 @@
 import sql
 import data_centers as db
 
-from datetime import datetime, timedelta, date
-
-# define formatted date parameters: yesterday = sus format, today = timestamp format
-today = datetime.now().strftime('%Y-%m-%d')
-yesterday = (datetime.now() - timedelta(1)).strftime('%Y%m%d')
-
 
 # pull all pricing agreements keyed day prior with customer detail out of 240 (dpm) 055 (Digital Deals)
 def usbl_agreements_created_yesterday():
@@ -56,7 +50,7 @@ def insert_into_sql_server(dataset, table):
 # pull all available customer specs and account ties in alaska and return a list of records.
 def alaska_accounts(dataset):
 
-    # format sql string of all customer specs on agreements loaded <yesterday>
+    # format sql string of all customer specs on agreements loaded yesterday
     specs = "'" + "','".join(str(row.SPEC) for row in dataset) + "'"
 
     # establish connection to sus as450a
@@ -153,14 +147,14 @@ def agreement_item_eligibility(agreements):
     va = agreement_dictionary['va']
     ca = agreement_dictionary['ca']
 
-    # get item eligibility from dpm agreements
+    # get item eligibility from dpm agreements (0 identifies dpm agreements)
     sus = db.sus('240')
-    item_eligibility = sus.execute(sql.usbl_agreement_item(va, ca)).fetchall()
+    item_eligibility = sus.execute(sql.usbl_agreement_item(va, ca, 0)).fetchall()
     sus.close
 
-    # get item eligibility from dgd agreements
+    # get item eligibility from dgd agreements (999999999 identifies digital deals agreements)
     sus = db.sus('055')
-    item_eligibility.extend(sus.execute(sql.usbl_agreement_item(va, ca)).fetchall())
+    item_eligibility.extend(sus.execute(sql.usbl_agreement_item(va, ca, 999999999)).fetchall())
     sus.close
 
     return item_eligibility
@@ -281,7 +275,15 @@ def database_command(command):
         sql_server.execute(command)
 
     sql_server.commit()
-    sql_server.close
+    sql_server.close()
+
+# execute a query to sql server database - return results
+def database_query(query):
+    sql_server = db.sql_server()
+    records = sql_server.execute(query).fetchall()
+    sql_server.close()
+
+    return records
 
 
 # insert item details into the SQL server so the handling fee can be calculated. 
@@ -296,8 +298,8 @@ def seattle_item_details(dataset):
     return seattle_item_details
 
 
-# function to clear zoned agreements from sql server. Look at agreements with matching items
-# customers and overlapping date range - remove agreement where seattle is not in distribution list.
+# clear zoned agreements - delete agreements with matching items/customers and overlapping date range 
+# and remove agreement where seattle is not in distribution list.
 def clear_zoned_agreements():
 
     sql_server = db.sql_server()
@@ -315,89 +317,65 @@ def clear_zoned_agreements():
     sql_server.close()
 
 
-
-
-
-
-
-# function to return all vendors that either need to be pulled into alaska or require vadam ties. 
-def vadam_ties():
-
-    # query vendors for agreements that could not be created from *todays job
-    vendors = db.sql_server.execute(f'''
-        SELECT DISTINCT VENDOR_NBR 
-
-        FROM Alaska_Header
-
-        WHERE TIMESTAMP = '{today}'
-        AND LEFT(ALASKA_VA,2) = 'VA' 
-    ''').fetchall()
-
-    # return list of vendors
-    return vendors
-
-
-# function to return all active agreements keyed by the alasak bot. 
-def active_agreements():
-
-    # get today's date
-    now = date.today()
-
-    agreements = db.sql_server.execute(f'''
-        SELECT
-        RIGHT('00000' + VA, 9) AS VA, 
-        ALASKA_VA
-
-        FROM ALASKA_HEADER 
-
-        WHERE DATEFROMPARTS('20' + RIGHT(END_DT,2), LEFT(END_DT,2), RIGHT(LEFT(END_DT,4),2)) >= '{now}' 
-        AND ALASKA_VA NOT IN ('', 'VA10023', 'VA10024')
-    ''').fetchall()
-
-    return agreements
-
-
-# function to return active agreements keyed by the bot which have been updated yesterday 
+# get active agreements keyed by the bot which have been updated yesterday 
 def changed_agreements_header(agreements):
 
-    # format active agreements for SQL statement
     active_agreements = "'" + "','".join(str(row.VA) for row in agreements) + "'"
 
-    # establish connection to as240a
+    # query dpm agreements changed yesterday (0 identifies dpm agreements)
     sus = db.sus('240')
+    changed_agreements = sus.execute(sql.agreements_updated_yesterday(active_agreements, 0)).fetchall()
+    sus.close()
 
-    # query agreements changed yesterday 
-    changed_agreements = sus.execute(f'''
-        SELECT 
-        O6ENNM AS VA, 
-        TRIM(O6CHDS) AS FIELD, 
-        CASE 
-            WHEN O6CHFN = 'M7VASD' THEN LEFT(RIGHT(M7VASD,4),2) || RIGHT(M7VASD,2) || RIGHT(LEFT(M7VASD,4),2) 
-            WHEN O6CHFN = 'M7VAED' THEN LEFT(RIGHT(M7VAED,4),2) || RIGHT(M7VAED,2) || RIGHT(LEFT(M7VAED,4),2)
-        END AS VALUE
-
-        FROM SCDBFP10.PMAGO6PF
-
-        INNER JOIN (
-            SELECT 
-            RIGHT('000000000' || CAST(M7VAGN AS VARCHAR(11)), 9) AS M7VAGN, 
-            M7VASD, 
-            M7VAED 
-
-            FROM SCDBFP10.PMVHM7PF
-        )
-        ON O6ENNM = M7VAGN
-
-        WHERE O6PMAC = 'VPD'
-        AND O6EADT >= 20230401
-        AND O6CHFN IN ('M7VASD','M7VAED')
-        AND O6ENNM IN ({active_agreements})
-    ''').fetchall()
-
-    # close sus connection
+    # query dgd agreements changed yesterday (999999999 identifies digital deals agreements)
+    sus = db.sus('055')
+    changed_agreements = sus.execute(sql.agreements_updated_yesterday(active_agreements, 999999999)).fetchall()
     sus.close()
 
     return changed_agreements
+
+
+# get list of active agreements updated yesterday
+def get_updated_agreements():
+
+    # get list of all active agreement w/ local agreement keyed by alaska. 
+    bot_agreements = database_query(sql.get_active_agreements)
+
+    # dictionary of all agreements where key is lead va and item is alaska va
+    agreement_reference = {agreement[0]:agreement[1] for agreement in bot_agreements}
+
+    # get list of updated agreements  
+    updated_agreements = changed_agreements_header(bot_agreements)
+
+    # create dictionary of updated agreements using the alaska va as the key
+    compiled_updates = {}
+    for agreement in updated_agreements:
+        
+        va = agreement_reference[agreement.VA]
+        field = agreement.FIELD
+        value = str(agreement.VALUE)
+
+        if va not in compiled_updates: compiled_updates[va] = {}
+
+        compiled_updates[va][field] = value
+
+    return compiled_updates
+
+
+# calculate handling fee/freight upcharge and add to item rate. 
+def alaska_sourcing_upload(alaska_items):
+
+    # insert item and source vendor details into sql server
+    insert_into_sql_server(alaska_items, 'Item_Source_Vendor')
+
+    # update sql server with source vendor information and return list of items sourced from seattle
+    seattle_items = update_source_vendor()
+
+    # get list details (catch weight, net/gross weight, freight) on items sourced from seattle
+    seattle_sourcing = seattle_item_details(seattle_items)
+
+    # insert seattle item detail into sql server
+    insert_into_sql_server(seattle_sourcing, 'Seattle_Items')
 
 
 # upload dpm/dgd agreement customer eligibility for deals created yesterday w/ alaska customers
@@ -423,30 +401,14 @@ def alaska_customer_upload():
     return alaska_deviations
 
 
-# calculate handling fee/freight upcharge and add to item rate. 
-def alaska_sourcing_upload(alaska_items):
-
-    # insert item and source vendor details into sql server
-    insert_into_sql_server(alaska_items, 'Item_Source_Vendor')
-
-    # update sql server with source vendor information and return list of items sourced from seattle
-    seattle_items = update_source_vendor()
-
-    # get list details (catch weight, net/gross weight, freight) on items sourced from seattle
-    seattle_sourcing = seattle_item_details(seattle_items)
-
-    # insert seattle item detail into sql server
-    insert_into_sql_server(seattle_sourcing, 'Seattle_Items')
-
-
 # upload dpm/dgd agreement item eligibility for deals created yesterday w/ alaska customers.
 # update rates with handling fee/freight upcharge.
-def alaska_item_upload(alaska_deviations):
+def alaska_item_upload(deviations):
 
     alaska_deviations = {}
 
     # get list of alaska agreement item eligibliity
-    item_eligibility = agreement_item_eligibility(alaska_deviations)
+    item_eligibility = agreement_item_eligibility(deviations)
 
     if len(item_eligibility) > 0:
 
@@ -483,7 +445,7 @@ def alaska_header_upload(alaska_deviations):
     clear_zoned_agreements()
 
 
-# function to pull all dpm/dgd agreement elements for anything created <yesterday> with alaska eligibility
+# pull all dpm/dgd agreement elements for anything created yesterday with alaska eligibility
 def upload_alaska_deviations():
 
     # get list of dpm/dgd agreement numbers for deals created yesterday w/ alaska customers
@@ -495,7 +457,7 @@ def upload_alaska_deviations():
     # upload alaska agreement header details 
     if alaska_deviations_item: alaska_header_upload(alaska_deviations_item)
     
-    # get dictionary of agreement criteria for return. dictionary to include agreement header, item, and customer detail
+    # get dictionary of agreement header/item/customer detail
     deviations = deviation_details()
 
     # print staus message and clean tables (item/customer) if there are no alaska devitions to create
@@ -507,30 +469,3 @@ def upload_alaska_deviations():
         print('upload complete: no deviations')
 
     return deviations
-
-
-def get_updated_agreements():
-
-    # get list of all active lead agreement w/ local agreement keyed by alaska. 
-    bot_agreements = active_agreements()
-
-    # dictionary of all agreements where key is lead va and item is alaska va
-    agreement_reference = {agreement[0]:agreement[1] for agreement in bot_agreements}
-
-    # get list of updated agreements  
-    updated_agreements = changed_agreements_header(bot_agreements)
-
-    # create dictionary of updated agreements using the alaska va as the key
-    compiled_updates = {}
-    for agreement in updated_agreements:
-        
-        va = agreement_reference[agreement.VA]
-        field = agreement.FIELD
-        value = str(agreement.VALUE)
-
-        if va not in compiled_updates: compiled_updates[va] = {}
-
-        compiled_updates[va][field] = value
-
-    return compiled_updates
-

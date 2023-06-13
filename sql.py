@@ -1,10 +1,11 @@
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 
-# define formatted date parameters: yesterday = sus format, today = timestamp format
+# define formatted date parameters
 timestamp = datetime.now().strftime('%Y-%m-%d')
 today = datetime.now().strftime('%Y%m%d')
 yesterday = (datetime.now() - timedelta(1)).strftime('%Y%m%d')
 
+# all dpm agreements keyed yesterday with customer eligibility detail
 dpm_agreement_customers = f'''
     SELECT 
     CAST(M7VAGN AS VARCHAR(11)) AS VA, 
@@ -120,6 +121,7 @@ dpm_agreement_customers = f'''
     AND TRIM(DVT500) NOT LIKE '%450'
 '''
 
+# all digital deals agreements keyed yesterday with customer eligibility detail
 dgd_agreement_customers = f'''
     SELECT 
     CAST(M7VAGN AS VARCHAR(11)) AS VA, 
@@ -199,16 +201,16 @@ dgd_agreement_customers = f'''
     AND NHAGRN = 999999999
 '''
 
+# delete records from alaska header/item/customer tables created today
 database_cleanup = f'''
     BEGIN TRANSACTION 
-
         DELETE FROM Alaska_Customer_Eligibility WHERE TIMESTAMP = '{timestamp}'
         DELETE FROM Alaska_Item_Eligibility WHERE TIMESTAMP = '{timestamp}'
         DELETE FROM Alaska_Header WHERE TIMESTAMP = '{timestamp}'
-
     COMMIT
 '''
 
+# add handling fee/freight upcharge to item rates
 update_item_rates = f'''
     BEGIN TRANSACTION 
 
@@ -297,6 +299,7 @@ update_item_rates = f'''
     COMMIT
 '''
 
+# delete seattle sourcing information
 delete_seattle_records = f'''
     BEGIN TRANSACTION
         DELETE FROM Item_Source_Vendor
@@ -304,6 +307,7 @@ delete_seattle_records = f'''
     COMMIT
 '''
 
+# get zoned agreements - defined as overlapping item/customer/created today w/ different distribution lists
 get_zoned_agreements = f'''
     SELECT DISTINCT CONCAT(HEADER.VA,HEADER.CA) AS ZONED
 
@@ -347,12 +351,66 @@ get_zoned_agreements = f'''
     WHERE HEADER.SEATTLE_DIST = 'NO'
 '''
 
+# get agreements that could not be created in alaska due to vendor error
+get_vendor_errors = f'''
+    SELECT DISTINCT VENDOR_NBR 
+    FROM Alaska_Header
+    WHERE TIMESTAMP = '{timestamp}'
+    AND LEFT(ALASKA_VA, 2) = 'VA' 
+'''
 
+# get active alaska agreements
+get_active_agreements = f'''
+    SELECT
+    RIGHT('00000' + VA, 9) AS VA, 
+    ALASKA_VA
+
+    FROM ALASKA_HEADER 
+
+    WHERE DATEFROMPARTS('20' + RIGHT(END_DT,2), LEFT(END_DT,2), RIGHT(LEFT(END_DT,4),2)) >= '{timestamp}' 
+    AND ALASKA_VA NOT IN ('', 'VA10023', 'VA10024')
+'''
+
+
+# get vendor agreements updated day prior 
+def agreements_updated_yesterday(agreements, originator):
+    return f'''
+        SELECT 
+        O6ENNM AS VA, 
+        TRIM(O6CHDS) AS FIELD, 
+        CASE 
+            WHEN O6CHFN = 'M7VASD' THEN LEFT(RIGHT(M7VASD,4),2) || RIGHT(M7VASD,2) || RIGHT(LEFT(M7VASD,4),2) 
+            WHEN O6CHFN = 'M7VAED' THEN LEFT(RIGHT(M7VAED,4),2) || RIGHT(M7VAED,2) || RIGHT(LEFT(M7VAED,4),2)
+        END AS VALUE
+
+        FROM SCDBFP10.PMAGO6PF
+
+        INNER JOIN (
+            SELECT 
+            RIGHT('000000000' || CAST(M7VAGN AS VARCHAR(11)), 9) AS M7VAGN, 
+            M7VASD, 
+            M7VAED 
+
+            FROM SCDBFP10.PMVHM7PF
+
+            WHERE M7AGRN = {originator}
+        )
+        ON O6ENNM = M7VAGN
+
+        WHERE O6PMAC = 'VPD'
+        AND O6EADT >= {yesterday}
+        AND O6CHFN IN ('M7VASD','M7VAED')
+        AND O6ENNM IN ({agreements})
+    '''
+
+
+# get agreement numbers (va or ca depending on parameter) from table 
 def agreement_numbers(table, type):
     operator = '<>' if type == 'VA' else '='
     return f"SELECT DISTINCT {type} FROM {table} WHERE VA {operator} 0 AND TIMESTAMP = '{timestamp}'"
 
 
+# get active account ties for customer specs
 def account_ties(specs):
     return f'''
         SELECT DISTINCT TRIM(AZCEEN) AS SPEC
@@ -387,6 +445,7 @@ def account_ties(specs):
     '''
 
 
+# get valid customer specs
 def alaska_specs(specs):
     return f'''
         SELECT DISTINCT TRIM(JUCEEN) AS SPEC
@@ -407,6 +466,7 @@ def alaska_specs(specs):
     '''
 
 
+# delete records from customer table where there are no active account ties/valid customer specs
 def alaska_customer_cleanup(active_specs, account_ties):
     return f'''
         BEGIN TRANSACTION
@@ -444,6 +504,7 @@ def alaska_customer_cleanup(active_specs, account_ties):
     '''
 
 
+# delete records from customer and item tables where there are no valid items
 def alaska_item_cleanup(items):
     return f'''
     BEGIN TRANSACTION
@@ -469,6 +530,7 @@ def alaska_item_cleanup(items):
     '''
 
 
+# get agreement header details from dpm agreements
 def dpm_agreement_header(va, ca):
     return f'''
         SELECT DISTINCT
@@ -508,6 +570,7 @@ def dpm_agreement_header(va, ca):
         AND TRIM(DVCPTY) = 'VA'
 
         WHERE M7VAGN IN ({va})
+        AND M7AGRN = 0
 
         UNION
 
@@ -544,9 +607,11 @@ def dpm_agreement_header(va, ca):
         AND TRIM(DVCPTY) <> 'VA'
 
         WHERE NHCANO IN ({ca})
+        AND NHAGRN = 0
     '''
 
 
+# get agreement header details from digital deals agreements
 def dgd_agreement_header(va, ca):
     return f'''
         SELECT DISTINCT
@@ -582,6 +647,7 @@ def dgd_agreement_header(va, ca):
         AND M7ACAN <> 0
 
         WHERE M7VAGN IN ({va})
+        AND M7AGRN = 999999999
 
         UNION
 
@@ -614,9 +680,12 @@ def dgd_agreement_header(va, ca):
         FROM SCDBFP10.PMPVNHPF
 
         WHERE NHCANO IN ({ca})
+        AND NHAGRN = 999999999
     '''
 
-def usbl_agreement_item(va, ca):
+
+# get agreement item eligibility details 
+def usbl_agreement_item(va, ca, originator):
     return f'''
         SELECT 
         CAST(M7VAGN AS VARCHAR(11)) AS LEAD_VA, 
@@ -645,6 +714,7 @@ def usbl_agreement_item(va, ca):
         AND M7ACAN <> 0 
 
         WHERE M7VAGN IN ({va})
+        AND M7AGRN = {originator}
 
         UNION
 
@@ -671,6 +741,7 @@ def usbl_agreement_item(va, ca):
 
         WHERE M7VAGN IN ({va})
         AND M7ACAN = 0
+        AND M7AGRN = {originator}
 
         UNION
 
@@ -696,8 +767,11 @@ def usbl_agreement_item(va, ca):
         ON NHCANO = QXCANO
 
         WHERE NHCANO IN ({ca})
+        AND NHAGRN = {originator}
     '''
 
+
+# get valid items and sourcing information from alaska
 def valid_alaska_items(items):
     return f'''
         SELECT DISTINCT 
@@ -712,6 +786,8 @@ def valid_alaska_items(items):
         WHERE TRIM(JFITEM) IN ({items}) 
     '''
 
+
+# get item details from seattle (net weight, gross weight, catch weight, and freight)
 def seattle_item_info(items):
     return f'''
         SELECT 
@@ -730,6 +806,7 @@ def seattle_item_info(items):
     '''
 
 
+# save alaska agreement numbers to header table
 def log_alaska_agreement(primary_key, va, ca):
     return f'''
         UPDATE Alaska_Header 
@@ -739,6 +816,7 @@ def log_alaska_agreement(primary_key, va, ca):
     '''
 
 
+# save new agreement term dates for agreements changed and updated
 def update_term_dates(va, change, end, start=None):
 
     update_start = '' if start is None else f", START_DT = '{start}'" 
@@ -753,6 +831,7 @@ def update_term_dates(va, change, end, start=None):
     '''
        
 
+# delete zoned agreements from all tables, header/item/customer
 def delete_zoned_agreements(agreements):
     return f'''
         BEGIN TRANSACTION
