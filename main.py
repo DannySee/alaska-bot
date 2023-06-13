@@ -1,7 +1,8 @@
+import sql
 import session_manager as bz
 import digital_deals as dgd
 
-from data_pull import upload_alaska_deviations, deviation_details, insert_alaska_agreements, get_updated_agreements, update_term_dates
+from data_pull import upload_alaska_deviations, deviation_details, database_command, get_updated_agreements, update_term_dates
 from outlook import send_vadam_request
 
 # open a global bluezone session
@@ -126,7 +127,7 @@ def load_alaska_agreements(deviations):
         # send alaska agreements to server
         alaska_va = agreements[-1]['VA']
         alaska_ca = agreements[-1]['CA']
-        insert_alaska_agreements(header.PRIMARY_KEY, alaska_va, alaska_ca)
+        database_command(sql.log_alaska_agreement(header.PRIMARY_KEY, alaska_va, alaska_ca))
 
     return agreements
 
@@ -144,7 +145,7 @@ def update_alaska_agreements():
             print('VOID')
         elif 'END DTE' in updates[update]:
             bz.end_vendor_agreement(session, update, updates[update]['END DTE'])
-            update_term_dates(update, 'END DTE', updates[update]['END DTE'])
+            database_command(sql.update_term_dates(update, 'END DTE', updates[update]['END DTE']))
 
 
 if __name__ == "__main__":

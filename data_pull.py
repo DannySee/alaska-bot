@@ -203,8 +203,8 @@ def delete_agreements_without_items(dataset):
     # delete all lead agreements where there are no items in alaska and commit transaction
     items = "'" + "','".join(str(row.ITEM) for row in dataset) + "'"
 
-    sql_server = db.sql_server
-    sql_server.execute(sql.alaska_item_cleanup)
+    sql_server = db.sql_server()
+    sql_server.execute(sql.alaska_item_cleanup(items))
     sql_server.commit()
 
     # get list of vendor/customer agreement numbers from item table
@@ -218,15 +218,6 @@ def delete_agreements_without_items(dataset):
     sql_server.close()
     
     return deviations
-
-
-# clear all three alaska tables where timestamp is today
-def delete_database_records():
-
-    sql_server = db.sql_server
-    sql_server.execute(sql.database_cleanup)
-    sql_server.commit()
-    sql_server.close()
 
 
 # get agreement details for each databse table
@@ -265,7 +256,7 @@ def deviation_details():
 # update sql server to include source vendor number for each item in alaska_item_eligibility
 def update_source_vendor():
 
-    sql_server = db.sql_server
+    sql_server = db.sql_server()
 
     # update source vendor number in sql server by item
     sql_server.execute(sql.update_item_sourcing)
@@ -279,268 +270,54 @@ def update_source_vendor():
     return seattle_items
 
 
+# execute a command to sql server database - no return
+def database_command(command):
+    sql_server = db.sql_server()
+
+    # loop through and execute list of commands or execute single command
+    if type(command) is list:
+        [sql_server.execute(query) for query in command]
+    else:
+        sql_server.execute(command)
+
+    sql_server.commit()
+    sql_server.close
 
 
-
-
-# function to insert all items on alaska deviations into the SQL server so that the appropriate 
-# handling fee can be calculated. 
+# insert item details into the SQL server so the handling fee can be calculated. 
 def seattle_item_details(dataset):
 
-    # establish connection to sus as055a (seattle)
+    # pull items, net weight, gross weight, catch weight, and freight for items sourced from seattle
     sus = db.sus('055')
-
-    # format string of items in alaska
     items = "'" + "','".join(str(row.ITEM) for row in dataset) + "'"
-
-    # pull items, net weight, cross weight, catch weight, and freight for items sourced from seattle
-    seattle_item_details = sus.execute(f'''
-        SELECT 
-        TRIM(JFITEM) AS ITEM, 
-        CAST(JFITNW AS VARCHAR(11)) AS NET_WEIGHT, 
-        CAST(JFITGW AS VARCHAR(11)) AS GROSS_WEIGHT, 
-        CAST(JFITCI AS VARCHAR(11)) AS CATCH_WEIGHT, 
-        CAST(T7LAPC-T7LFOB AS VARCHAR(11)) AS FREIGHT  
-        
-        FROM SCDBFP10.USIAJFPF 
-        
-        LEFT JOIN SCDBFP10.IMMHT7PF 
-        ON JFITEM = T7ITEM 
-        
-        WHERE TRIM(JFITEM) IN ({items})
-    
-    ''').fetchall()
-
-    # close sus connection
+    seattle_item_details = sus.execute(sql.seattle_item_info(items)).fetchall()
     sus.close()
     
-    # return list of seattle item details
     return seattle_item_details
-
-
-# function to calculate alaska rate. The calculation is determined by the cost basis of the original (lead) agreement
-# the rebate type, rebate basis, and item sourcing. for full breakdown of calculation logic, see process map.
-def calculate_alaska_rate():
-
-    # update the alaska_item_eligibility table with calculated alaska rate
-    db.sql_server.execute(f'''
-        BEGIN TRANSACTION 
-
-        UPDATE T1
-
-        SET T1.VA_ALASKA_AMT = 
-        CASE 
-            WHEN T3.COST_BASIS = 'D' 
-            AND RIGHT(T1.VA_REBATE_BASIS, 1) <> 'P' 
-            THEN CAST(T1.VA_REBATE_AMT AS FLOAT) + 0.69
-
-            WHEN T3.COST_BASIS = 'D' 
-            AND RIGHT(T1.VA_REBATE_BASIS, 1) = 'P' 
-            THEN ROUND(CAST(T1.VA_REBATE_AMT AS FLOAT) + (0.69 / CAST(T2.GROSS_WEIGHT AS FLOAT)),3)
-
-            WHEN T3.COST_BASIS = 'F' 
-            AND RIGHT(T1.VA_REBATE_BASIS, 1) <> 'P' 
-            THEN CAST(T1.VA_REBATE_AMT AS FLOAT) + 0.69 + CAST(T2.FREIGHT AS FLOAT)
-
-            WHEN T3.COST_BASIS = 'F' 
-            AND RIGHT(T1.VA_REBATE_BASIS, 1) = 'P' 
-            AND T2.CATCH_WEIGHT = 'Y' 
-            THEN ROUND(CAST(T1.VA_REBATE_AMT AS FLOAT) + (0.69 / CAST(T2.GROSS_WEIGHT AS FLOAT)) + CAST(T2.FREIGHT AS FLOAT),3)
-
-            WHEN T3.COST_BASIS = 'F'
-            AND RIGHT(T1.VA_REBATE_BASIS, 1) = 'P' 
-            AND T2.CATCH_WEIGHT = 'N' 
-            THEN ROUND(CAST(T1.VA_REBATE_AMT AS FLOAT) + (0.69 / CAST(T2.GROSS_WEIGHT AS FLOAT)) + (CAST(T2.FREIGHT AS FLOAT) / CAST(T2.NET_WEIGHT AS FLOAT)),3)
-
-            ELSE T1.VA_REBATE_AMT
-        END
-
-        FROM Alaska_Item_Eligibility AS T1
-
-        INNER JOIN SEATTLE_ITEMS AS T2
-        ON T1.ITEM = T2.ITEM
-
-        INNER JOIN Alaska_Header AS T3
-        ON T1.VA = T3.VA
-        AND T1.CA = T3.CA
-
-        WHERE T1.VA_REBATE_AMT <> ''
-        AND T1.VA_REBATE_BASIS NOT IN ('GC','GP','DC','DP') 
-        AND T1.TIMESTAMP = '{today}'
-
-        UPDATE T1
-
-        SET T1.CA_ALASKA_ADJ_AP = 
-        CASE 
-            WHEN T3.COST_BASIS = 'D' 
-            AND RIGHT(T1.CA_REBATE_BASIS, 1) <> 'P' 
-            THEN CAST(T1.CA_ADJ_AP AS FLOAT) + 0.69
-
-            WHEN T3.COST_BASIS = 'D' 
-            AND RIGHT(T1.CA_REBATE_BASIS, 1) = 'P' 
-            THEN ROUND(CAST(T1.CA_ADJ_AP AS FLOAT) + (0.69 / CAST(T2.GROSS_WEIGHT AS FLOAT)),3)
-
-            WHEN T3.COST_BASIS = 'F' 
-            AND RIGHT(T1.CA_REBATE_BASIS, 1) <> 'P' 
-            THEN CAST(T1.CA_ADJ_AP AS FLOAT) + 0.69 + CAST(T2.FREIGHT AS FLOAT)
-
-            WHEN T3.COST_BASIS = 'F' 
-            AND RIGHT(T1.CA_REBATE_BASIS, 1) = 'P' 
-            AND T2.CATCH_WEIGHT = 'Y' 
-            THEN ROUND(CAST(T1.CA_ADJ_AP AS FLOAT) + (0.69 / CAST(T2.GROSS_WEIGHT AS FLOAT)) + CAST(T2.FREIGHT AS FLOAT),3)
-
-            WHEN T3.COST_BASIS = 'F'
-            AND RIGHT(T1.CA_REBATE_BASIS, 1) = 'P' 
-            AND T2.CATCH_WEIGHT = 'N' 
-            THEN ROUND(CAST(T1.CA_ADJ_AP AS FLOAT) + (0.69 / CAST(T2.GROSS_WEIGHT AS FLOAT)) + (CAST(T2.FREIGHT AS FLOAT) / CAST(T2.NET_WEIGHT AS FLOAT)),3)
-        END
-
-        FROM Alaska_Item_Eligibility AS T1
-
-        INNER JOIN SEATTLE_ITEMS AS T2
-        ON T1.ITEM = T2.ITEM
-
-        INNER JOIN Alaska_Header AS T3
-        ON T1.VA = T3.VA
-        AND T1.CA = T3.CA
-
-        WHERE T1.CA_ADJ_AP <> ''
-        AND T1.CA_REBATE_BASIS NOT IN ('GC','GP','DC','DP') 
-        AND T1.TIMESTAMP = '{today}'
-
-        COMMIT
-    ''')
-
-    # commit transaction and update table
-    db.sql_server.commit()
-
-
-# function to update sql server with newly created agreements
-def insert_alaska_agreements(primary_key, va, ca):
-
-    # update alaska_header table with newly created agreement numbers
-    db.sql_server.execute(f'''
-        UPDATE Alaska_Header 
-
-        SET ALASKA_VA = '{va}',
-        ALASKA_CA = '{ca}'
-
-        WHERE PRIMARY_KEY = {primary_key}
-    ''')
-
-    # commit transaction 
-    db.sql_server.commit()
-
-
-# function to update sql server with newly created agreements
-def update_term_dates(va, change, end, start=None):
-
-    # get today's date
-    now = date.today()
-
-    update_start = ''
-    if start is not None: update_start = f", START_DT = '{start}'"
-
-    # update alaska_header table with newly created agreement numbers
-    db.sql_server.execute(f'''
-        UPDATE Alaska_Header 
-
-        SET END_DT = '{end}',
-        TIMESTAMP = '{now}',
-        CHANGE_CODE = '{change}'
-        {update_start}
-
-        WHERE ALASKA_VA = '{va}'
-    ''')
-
-    # commit transaction 
-    db.sql_server.commit()
-
-
-# function to delete all seattle sourcing information from sql server
-def delete_seattle_records():
-
-    # delete seattle sourcing information from item_source_vendor and seattle_items table
-    db.sql_server.execute(f'''
-        BEGIN TRANSACTION
-
-        DELETE FROM Item_Source_Vendor
-        DELETE FROM Seattle_Items
-
-        COMMIT
-    ''')
-
-    # commit transaction
-    db.sql_server.commit()
 
 
 # function to clear zoned agreements from sql server. Look at agreements with matching items
 # customers and overlapping date range - remove agreement where seattle is not in distribution list.
 def clear_zoned_agreements():
 
-    # get zoned agreements from 
-    zoned_agreements = db.sql_server.execute(f'''
-        SELECT DISTINCT CONCAT(HEADER.VA,HEADER.CA) AS ZONED
+    sql_server = db.sql_server()
 
-        FROM (
-            SELECT 
-            HEADER.VA, 
-            HEADER.CA, 
-            ITEM.ITEM, 
-            CUSTOMER.SPEC, 
-            HEADER.SEATTLE_DIST 
+    # get zoned agreements from database
+    zoned_agreements = sql_server.execute(sql.get_zoned_agreements).fetchall()
 
-            FROM ALASKA_HEADER AS HEADER
-
-            INNER JOIN Alaska_Customer_Eligibility AS CUSTOMER
-            ON HEADER.VA = CUSTOMER.VA
-            AND HEADER.CA = CUSTOMER.CA
-
-            INNER JOIN Alaska_Item_Eligibility as ITEM
-            ON HEADER.VA = ITEM.VA 
-            AND HEADER.CA = ITEM.CA
-
-            WHERE HEADER.TIMESTAMP = '{today}'
-        ) AS PARENT
-
-        INNER JOIN Alaska_Customer_Eligibility AS CUSTOMER 
-        ON PARENT.SPEC = CUSTOMER.SPEC
-        AND CONCAT(PARENT.VA, PARENT.CA) <> CONCAT(CUSTOMER.VA, CUSTOMER.CA)
-        AND CUSTOMER.TIMESTAMP = '{today}'
-
-        INNER JOIN Alaska_ITEM_Eligibility AS ITEM 
-        ON PARENT.ITEM = ITEM.ITEM
-        AND CUSTOMER.VA = ITEM.VA
-        AND CUSTOMER.CA = ITEM.CA
-        AND ITEM.TIMESTAMP = '{today}'
-
-        INNER JOIN Alaska_Header AS HEADER
-        ON CUSTOMER.VA = HEADER.VA
-        AND CUSTOMER.CA = HEADER.CA
-        AND HEADER.TIMESTAMP = '{today}'
-
-        WHERE HEADER.SEATTLE_DIST = 'NO'
-    ''').fetchall()
-
-    # do not proceed if there are no zoned agreements to remove
     if len(zoned_agreements) > 0:
 
-        # format sql string of all zoned agreements in sql server
+        # remove all zoned agreements from database
         zoned = "'" + "','".join(str(row.ZONED) for row in zoned_agreements) + "'"
+        sql_server.execute(sql.delete_zoned_agreements(zoned))
+        sql_server.commit()
 
-        # remove all zoned agreements from sql server
-        db.sql_server.execute(f'''
-            BEGIN TRANSACTION
+    sql_server.close()
 
-            DELETE FROM ALASKA_HEADER WHERE CONCAT(VA, CA) IN ({zoned})
-            DELETE FROM ALASKA_ITEM_ELIGIBILITY WHERE CONCAT(VA, CA) IN ({zoned})
-            DELETE FROM ALASKA_CUSTOMER_ELIGIBILITY WHERE CONCAT(VA, CA) IN ({zoned})
 
-            COMMIT
-        ''')
 
-        # commit transaction
-        db.sql_server.commit()
+
+
 
 
 # function to return all vendors that either need to be pulled into alaska or require vadam ties. 
@@ -686,9 +463,8 @@ def alaska_item_upload(alaska_deviations):
         # return list of alaska agreement numbers
         alaska_deviations = delete_agreements_without_items(valid_alaska_items)
 
-        # calculate alaska rate in sql server and clean sourcing information
-        calculate_alaska_rate()
-        delete_seattle_records()
+        # calculate handling fee/freight upcharge and clean sourcing information
+        database_command([sql.update_item_rates, sql.delete_seattle_records])
 
     return alaska_deviations
 
@@ -725,7 +501,7 @@ def upload_alaska_deviations():
     # print staus message and clean tables (item/customer) if there are no alaska devitions to create
     record_count = len(deviations['header'])
     if record_count > 0:
-        delete_database_records()
+        database_command(sql.database_cleanup)
         print(f'upload complete: {record_count} deviations')
     else:
         print('upload complete: no deviations')

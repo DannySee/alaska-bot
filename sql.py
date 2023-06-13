@@ -209,6 +209,144 @@ database_cleanup = f'''
     COMMIT
 '''
 
+update_item_rates = f'''
+    BEGIN TRANSACTION 
+
+        UPDATE T1
+
+        SET T1.VA_ALASKA_AMT = 
+        CASE 
+            WHEN T3.COST_BASIS = 'D' 
+            AND RIGHT(T1.VA_REBATE_BASIS, 1) <> 'P' 
+            THEN CAST(T1.VA_REBATE_AMT AS FLOAT) + 0.69
+
+            WHEN T3.COST_BASIS = 'D' 
+            AND RIGHT(T1.VA_REBATE_BASIS, 1) = 'P' 
+            THEN ROUND(CAST(T1.VA_REBATE_AMT AS FLOAT) + (0.69 / CAST(T2.GROSS_WEIGHT AS FLOAT)),3)
+
+            WHEN T3.COST_BASIS = 'F' 
+            AND RIGHT(T1.VA_REBATE_BASIS, 1) <> 'P' 
+            THEN CAST(T1.VA_REBATE_AMT AS FLOAT) + 0.69 + CAST(T2.FREIGHT AS FLOAT)
+
+            WHEN T3.COST_BASIS = 'F' 
+            AND RIGHT(T1.VA_REBATE_BASIS, 1) = 'P' 
+            AND T2.CATCH_WEIGHT = 'Y' 
+            THEN ROUND(CAST(T1.VA_REBATE_AMT AS FLOAT) + (0.69 / CAST(T2.GROSS_WEIGHT AS FLOAT)) + CAST(T2.FREIGHT AS FLOAT),3)
+
+            WHEN T3.COST_BASIS = 'F'
+            AND RIGHT(T1.VA_REBATE_BASIS, 1) = 'P' 
+            AND T2.CATCH_WEIGHT = 'N' 
+            THEN ROUND(CAST(T1.VA_REBATE_AMT AS FLOAT) + (0.69 / CAST(T2.GROSS_WEIGHT AS FLOAT)) + (CAST(T2.FREIGHT AS FLOAT) / CAST(T2.NET_WEIGHT AS FLOAT)),3)
+
+            ELSE T1.VA_REBATE_AMT
+        END
+
+        FROM Alaska_Item_Eligibility AS T1
+
+        INNER JOIN SEATTLE_ITEMS AS T2
+        ON T1.ITEM = T2.ITEM
+
+        INNER JOIN Alaska_Header AS T3
+        ON T1.VA = T3.VA
+        AND T1.CA = T3.CA
+
+        WHERE T1.VA_REBATE_AMT <> ''
+        AND T1.VA_REBATE_BASIS NOT IN ('GC','GP','DC','DP') 
+        AND T1.TIMESTAMP = '{today}'
+
+        UPDATE T1
+
+        SET T1.CA_ALASKA_ADJ_AP = 
+        CASE 
+            WHEN T3.COST_BASIS = 'D' 
+            AND RIGHT(T1.CA_REBATE_BASIS, 1) <> 'P' 
+            THEN CAST(T1.CA_ADJ_AP AS FLOAT) + 0.69
+
+            WHEN T3.COST_BASIS = 'D' 
+            AND RIGHT(T1.CA_REBATE_BASIS, 1) = 'P' 
+            THEN ROUND(CAST(T1.CA_ADJ_AP AS FLOAT) + (0.69 / CAST(T2.GROSS_WEIGHT AS FLOAT)),3)
+
+            WHEN T3.COST_BASIS = 'F' 
+            AND RIGHT(T1.CA_REBATE_BASIS, 1) <> 'P' 
+            THEN CAST(T1.CA_ADJ_AP AS FLOAT) + 0.69 + CAST(T2.FREIGHT AS FLOAT)
+
+            WHEN T3.COST_BASIS = 'F' 
+            AND RIGHT(T1.CA_REBATE_BASIS, 1) = 'P' 
+            AND T2.CATCH_WEIGHT = 'Y' 
+            THEN ROUND(CAST(T1.CA_ADJ_AP AS FLOAT) + (0.69 / CAST(T2.GROSS_WEIGHT AS FLOAT)) + CAST(T2.FREIGHT AS FLOAT),3)
+
+            WHEN T3.COST_BASIS = 'F'
+            AND RIGHT(T1.CA_REBATE_BASIS, 1) = 'P' 
+            AND T2.CATCH_WEIGHT = 'N' 
+            THEN ROUND(CAST(T1.CA_ADJ_AP AS FLOAT) + (0.69 / CAST(T2.GROSS_WEIGHT AS FLOAT)) + (CAST(T2.FREIGHT AS FLOAT) / CAST(T2.NET_WEIGHT AS FLOAT)),3)
+        END
+
+        FROM Alaska_Item_Eligibility AS T1
+
+        INNER JOIN SEATTLE_ITEMS AS T2
+        ON T1.ITEM = T2.ITEM
+
+        INNER JOIN Alaska_Header AS T3
+        ON T1.VA = T3.VA
+        AND T1.CA = T3.CA
+
+        WHERE T1.CA_ADJ_AP <> ''
+        AND T1.CA_REBATE_BASIS NOT IN ('GC','GP','DC','DP') 
+        AND T1.TIMESTAMP = '{timestamp}'
+
+    COMMIT
+'''
+
+delete_seattle_records = f'''
+    BEGIN TRANSACTION
+        DELETE FROM Item_Source_Vendor
+        DELETE FROM Seattle_Items
+    COMMIT
+'''
+
+get_zoned_agreements = f'''
+    SELECT DISTINCT CONCAT(HEADER.VA,HEADER.CA) AS ZONED
+
+    FROM (
+        SELECT 
+        HEADER.VA, 
+        HEADER.CA, 
+        ITEM.ITEM, 
+        CUSTOMER.SPEC, 
+        HEADER.SEATTLE_DIST 
+
+        FROM ALASKA_HEADER AS HEADER
+
+        INNER JOIN Alaska_Customer_Eligibility AS CUSTOMER
+        ON HEADER.VA = CUSTOMER.VA
+        AND HEADER.CA = CUSTOMER.CA
+
+        INNER JOIN Alaska_Item_Eligibility as ITEM
+        ON HEADER.VA = ITEM.VA 
+        AND HEADER.CA = ITEM.CA
+
+        WHERE HEADER.TIMESTAMP = '{timestamp}'
+    ) AS PARENT
+
+    INNER JOIN Alaska_Customer_Eligibility AS CUSTOMER 
+    ON PARENT.SPEC = CUSTOMER.SPEC
+    AND CONCAT(PARENT.VA, PARENT.CA) <> CONCAT(CUSTOMER.VA, CUSTOMER.CA)
+    AND CUSTOMER.TIMESTAMP = '{timestamp}'
+
+    INNER JOIN Alaska_ITEM_Eligibility AS ITEM 
+    ON PARENT.ITEM = ITEM.ITEM
+    AND CUSTOMER.VA = ITEM.VA
+    AND CUSTOMER.CA = ITEM.CA
+    AND ITEM.TIMESTAMP = '{timestamp}'
+
+    INNER JOIN Alaska_Header AS HEADER
+    ON CUSTOMER.VA = HEADER.VA
+    AND CUSTOMER.CA = HEADER.CA
+    AND HEADER.TIMESTAMP = '{timestamp}'
+
+    WHERE HEADER.SEATTLE_DIST = 'NO'
+'''
+
 
 def agreement_numbers(table, type):
     operator = '<>' if type == 'VA' else '='
@@ -572,4 +710,54 @@ def valid_alaska_items(items):
         ON JFITEM = MQITEM
 
         WHERE TRIM(JFITEM) IN ({items}) 
+    '''
+
+def seattle_item_info(items):
+    return f'''
+        SELECT 
+        TRIM(JFITEM) AS ITEM, 
+        CAST(JFITNW AS VARCHAR(11)) AS NET_WEIGHT, 
+        CAST(JFITGW AS VARCHAR(11)) AS GROSS_WEIGHT, 
+        CAST(JFITCI AS VARCHAR(11)) AS CATCH_WEIGHT, 
+        CAST(T7LAPC-T7LFOB AS VARCHAR(11)) AS FREIGHT  
+        
+        FROM SCDBFP10.USIAJFPF 
+        
+        LEFT JOIN SCDBFP10.IMMHT7PF 
+        ON JFITEM = T7ITEM 
+        
+        WHERE TRIM(JFITEM) IN ({items})
+    '''
+
+
+def log_alaska_agreement(primary_key, va, ca):
+    return f'''
+        UPDATE Alaska_Header 
+        SET ALASKA_VA = '{va}', 
+        ALASKA_CA = '{ca}' 
+        WHERE PRIMARY_KEY = {primary_key}'
+    '''
+
+
+def update_term_dates(va, change, end, start=None):
+
+    update_start = '' if start is None else f", START_DT = '{start}'" 
+    return f'''
+        UPDATE Alaska_Header 
+        SET END_DT = '{end}',
+        TIMESTAMP = '{timestamp}',
+        CHANGE_CODE = '{change}'
+        {update_start}
+
+        WHERE ALASKA_VA = '{va}'
+    '''
+       
+
+def delete_zoned_agreements(agreements):
+    return f'''
+        BEGIN TRANSACTION
+            DELETE FROM ALASKA_HEADER WHERE CONCAT(VA, CA) IN ({agreements})
+            DELETE FROM ALASKA_ITEM_ELIGIBILITY WHERE CONCAT(VA, CA) IN ({agreements})
+            DELETE FROM ALASKA_CUSTOMER_ELIGIBILITY WHERE CONCAT(VA, CA) IN ({agreements})
+        COMMIT
     '''
