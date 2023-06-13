@@ -1,0 +1,575 @@
+from datetime import datetime, timedelta, date
+
+# define formatted date parameters: yesterday = sus format, today = timestamp format
+timestamp = datetime.now().strftime('%Y-%m-%d')
+today = datetime.now().strftime('%Y%m%d')
+yesterday = (datetime.now() - timedelta(1)).strftime('%Y%m%d')
+
+dpm_agreement_customers = f'''
+    SELECT 
+    CAST(M7VAGN AS VARCHAR(11)) AS VA, 
+    CAST(M7ACAN AS VARCHAR(11)) AS CA, 
+    AZPCIE AS IEA, 
+    AZPCSC AS SPEC_CODE, 
+    TRIM(AZPCSP) AS SPEC, 
+    LEFT(RIGHT(AZEFSD,4),2) || RIGHT(AZEFSD,2) || RIGHT(LEFT(AZEFSD,4),2) AS START_DT, 
+    LEFT(RIGHT(AZEFED,4),2) || RIGHT(AZEFED,2) || RIGHT(LEFT(AZEFED,4),2) AS END_DT,
+    '{timestamp}' AS TIMESTAMP,
+    'VA' AS ELIGIBILITY_TYPE, 
+    'DPM' AS ORIGINATOR
+
+    FROM SCDBFP10.PMVHM7PF 
+
+    INNER JOIN SCDBFP10.USCNAZL0 
+    ON RIGHT('000' || M7VAGN, 9) = AZCEEN 
+    AND AZCEAI = 'VA ' 
+
+    LEFT JOIN SCDBFP10.PMDPDVRF
+    ON CAST(M7VAGN AS VARCHAR(11)) = TRIM(DVCPM9)
+    AND TRIM(DVCPTY) = 'VA'
+
+    WHERE M7EADT = {yesterday}
+    AND M7ACAN = 0
+    AND M7PPAF = 'PD'
+    AND M7AGTY <> 'NGEL'
+    AND M7VAGD NOT LIKE '%VOID%' 
+    AND M7VAGD NOT LIKE '%RBB%'
+    AND (
+        LENGTH(TRIM(DVPDDA)) <> 3 
+        OR UPPER(DVPDDA) <> LOWER(DVPDDA) 
+        OR TRIM(DVPDDA) = '055'
+    )
+    AND TRIM(DVT500) NOT LIKE '%450'
+
+    UNION
+
+    SELECT 
+    CAST(M7VAGN AS VARCHAR(11)) AS VA, 
+    CAST(M7ACAN AS VARCHAR(11)) AS CA, 
+    T1.AZPCIE AS IEA, 
+    T1.AZPCSC AS SPEC_CODE, 
+    TRIM(T1.AZPCSP) AS SPEC, 
+    LEFT(RIGHT(T1.AZEFSD,4),2) || RIGHT(T1.AZEFSD,2) || RIGHT(LEFT(T1.AZEFSD,4),2) AS START_DT, 
+    LEFT(RIGHT(T1.AZEFED,4),2) || RIGHT(T1.AZEFED,2) || RIGHT(LEFT(T1.AZEFED,4),2) AS END_DT,
+    '{timestamp}' AS TIMESTAMP,
+    CASE WHEN T2.AZCEEN IS NULL THEN 'CA' ELSE 'VA|CA' END AS ELIGIBILITY_TYPE, 
+    'DPM' AS ORIGINATOR
+
+    FROM SCDBFP10.PMVHM7PF 
+
+    INNER JOIN SCDBFP10.USCNAZL0 AS T1
+    ON RIGHT('000' || M7ACAN, 9) = T1.AZCEEN 
+    AND T1.AZCEAI = 'CA ' 
+
+    LEFT JOIN  SCDBFP10.USCNAZL0 AS T2
+    ON RIGHT('000' || M7VAGN, 9) = T2.AZCEEN 
+    AND T2.AZCEAI = 'VA ' 
+    AND T1.AZPCSP = T2.AZPCSP
+
+    LEFT JOIN SCDBFP10.PMDPDVRF
+    ON CAST(M7VAGN AS VARCHAR(11)) = TRIM(DVCPM9)
+    AND TRIM(DVCPTY) = 'VA'
+
+    WHERE M7EADT = {yesterday}
+    AND M7ACAN <> 0
+    AND M7PPAF = 'PD'
+    AND M7AGTY <> 'NGEL'
+    AND M7VAGD NOT LIKE '%VOID%' 
+    AND M7VAGD NOT LIKE '%RBB%'
+    AND (
+        LENGTH(TRIM(DVPDDA)) <> 3 
+        OR UPPER(DVPDDA) <> LOWER(DVPDDA) 
+        OR TRIM(DVPDDA) = '055'
+    )
+    AND TRIM(DVT500) NOT LIKE '%450'
+
+    UNION
+
+    SELECT '0' AS VA, 
+    CAST(NHCANO AS VARCHAR(11)) AS CA, 
+    AZPCIE AS IEA, 
+    AZPCSC AS SPEC_CODE,
+    TRIM(AZPCSP) AS SPEC, 
+    LEFT(RIGHT(AZEFSD,4),2) || RIGHT(AZEFSD,2) || RIGHT(LEFT(AZEFSD,4),2) AS START_DT, 
+    LEFT(RIGHT(AZEFED,4),2) || RIGHT(AZEFED,2) || RIGHT(LEFT(AZEFED,4),2) AS END_DT,
+    '{timestamp}' AS TIMESTAMP,
+    'CA' AS ELIGIBILITY_TYPE, 
+    'DPM' AS ORIGINATOR
+
+    FROM SCDBFP10.PMPVNHPF
+
+    INNER JOIN SCDBFP10.USCNAZL0 
+    ON RIGHT('000' || NHCANO, 9) = AZCEEN 
+    AND AZCEAI = 'CA ' 
+
+    LEFT JOIN SCDBFP10.PMDPDVRF
+    ON CAST(NHCANO AS VARCHAR(11)) = TRIM(DVCPM9)
+    AND TRIM(DVCPTY) = 'CA'
+
+    WHERE NHEADT = {yesterday}
+    AND NHCVAN = 0
+    AND NHPPAF = 'PD'
+    AND NHAGTY <> 'NGEL'
+    AND NHCADC NOT LIKE '%VOID%' 
+    AND NHCADC NOT LIKE '%RBB%'
+    AND (
+        LENGTH(TRIM(DVPDDA)) <> 3 
+        OR UPPER(DVPDDA) <> LOWER(DVPDDA) 
+        OR TRIM(DVPDDA) = '055'
+    )
+    AND TRIM(DVT500) NOT LIKE '%450'
+'''
+
+dgd_agreement_customers = f'''
+    SELECT 
+    CAST(M7VAGN AS VARCHAR(11)) AS VA, 
+    CAST(M7ACAN AS VARCHAR(11)) AS CA, 
+    AZPCIE AS IEA, 
+    AZPCSC AS SPEC_CODE, 
+    TRIM(AZPCSP) AS SPEC, 
+    LEFT(RIGHT(AZEFSD,4),2) || RIGHT(AZEFSD,2) || RIGHT(LEFT(AZEFSD,4),2) AS START_DT, 
+    LEFT(RIGHT(AZEFED,4),2) || RIGHT(AZEFED,2) || RIGHT(LEFT(AZEFED,4),2) AS END_DT,
+    '{timestamp}' AS TIMESTAMP,
+    'VA' AS ELIGIBILITY_TYPE, 
+    'DGD' AS ORIGINATOR
+
+    FROM SCDBFP10.PMVHM7PF 
+
+    INNER JOIN SCDBFP10.USCNAZL0 
+    ON RIGHT('000' || M7VAGN, 9) = AZCEEN 
+    AND AZCEAI = 'VA ' 
+
+    WHERE M7EADT = {yesterday}
+    AND M7ACAN = 0
+    AND M7VAGD NOT LIKE '%VOID%' 
+    AND M7AGRN = 999999999
+
+    UNION
+
+    SELECT 
+    CAST(M7VAGN AS VARCHAR(11)) AS VA, 
+    CAST(M7ACAN AS VARCHAR(11)) AS CA, 
+    T1.AZPCIE AS IEA, 
+    T1.AZPCSC AS SPEC_CODE, 
+    TRIM(T1.AZPCSP) AS SPEC, 
+    LEFT(RIGHT(T1.AZEFSD,4),2) || RIGHT(T1.AZEFSD,2) || RIGHT(LEFT(T1.AZEFSD,4),2) AS START_DT, 
+    LEFT(RIGHT(T1.AZEFED,4),2) || RIGHT(T1.AZEFED,2) || RIGHT(LEFT(T1.AZEFED,4),2) AS END_DT,
+    '{timestamp}' AS TIMESTAMP,
+    CASE WHEN T2.AZCEEN IS NULL THEN 'CA' ELSE 'VA|CA' END AS ELIGIBILITY_TYPE, 
+    'DGD' AS ORIGINATOR
+
+    FROM SCDBFP10.PMVHM7PF 
+
+    INNER JOIN SCDBFP10.USCNAZL0 AS T1
+    ON RIGHT('000' || M7ACAN, 9) = T1.AZCEEN 
+    AND T1.AZCEAI = 'CA ' 
+
+    LEFT JOIN  SCDBFP10.USCNAZL0 AS T2
+    ON RIGHT('000' || M7VAGN, 9) = T2.AZCEEN 
+    AND T2.AZCEAI = 'VA ' 
+    AND T1.AZPCSP = T2.AZPCSP
+
+    WHERE M7EADT = {yesterday}
+    AND M7ACAN <> 0
+    AND M7VAGD NOT LIKE '%VOID%' 
+    AND M7AGRN = 999999999
+
+    UNION
+
+    SELECT '0' AS VA, 
+    CAST(NHCANO AS VARCHAR(11)) AS CA, 
+    AZPCIE AS IEA, 
+    AZPCSC AS SPEC_CODE,
+    TRIM(AZPCSP) AS SPEC, 
+    LEFT(RIGHT(AZEFSD,4),2) || RIGHT(AZEFSD,2) || RIGHT(LEFT(AZEFSD,4),2) AS START_DT, 
+    LEFT(RIGHT(AZEFED,4),2) || RIGHT(AZEFED,2) || RIGHT(LEFT(AZEFED,4),2) AS END_DT,
+    '{timestamp}' AS TIMESTAMP,
+    'CA' AS ELIGIBILITY_TYPE, 
+    'DGD' AS ORIGINATOR
+
+    FROM SCDBFP10.PMPVNHPF
+
+    INNER JOIN SCDBFP10.USCNAZL0 
+    ON RIGHT('000' || NHCANO, 9) = AZCEEN 
+    AND AZCEAI = 'CA ' 
+
+    WHERE NHEADT = {yesterday}
+    AND NHCVAN = 0
+    AND NHCADC NOT LIKE '%VOID%' 
+    AND NHAGRN = 999999999
+'''
+
+database_cleanup = f'''
+    BEGIN TRANSACTION 
+
+        DELETE FROM Alaska_Customer_Eligibility WHERE TIMESTAMP = '{timestamp}'
+        DELETE FROM Alaska_Item_Eligibility WHERE TIMESTAMP = '{timestamp}'
+        DELETE FROM Alaska_Header WHERE TIMESTAMP = '{timestamp}'
+
+    COMMIT
+'''
+
+
+def agreement_numbers(table, type):
+    operator = '<>' if type == 'VA' else '='
+    return f"SELECT DISTINCT {type} FROM {table} WHERE VA {operator} 0 AND TIMESTAMP = '{timestamp}'"
+
+
+def account_ties(specs):
+    return f'''
+        SELECT DISTINCT TRIM(AZCEEN) AS SPEC
+
+        FROM SCDBFP10.USCNAZL0 
+
+        WHERE TRIM(AZCEEN) IN ({specs}) 
+        AND AZEFED >= {today}
+        AND AZCEAI = 'GRP' 
+
+        UNION 
+
+        SELECT DISTINCT TRIM(JTHIMA)
+
+        FROM SCDBFP10.USCKJTPF
+
+        WHERE TRIM(JTHIMA) IN ({specs})
+        AND JTTTYP = 'PRNT'
+        AND JTFTYP NOT IN ('PRNT','MSTR')
+        AND JTTEDT >= {today}
+
+        UNION 
+
+        SELECT DISTINCT TRIM(JTTPAR)
+
+        FROM SCDBFP10.USCKJTPF
+
+        WHERE TRIM(JTTPAR) IN ({specs})
+        AND JTTTYP = 'PRNT'
+        AND JTFTYP NOT IN ('PRNT','MSTR')
+        AND JTTEDT >= {today}
+    '''
+
+
+def alaska_specs(specs):
+    return f'''
+        SELECT DISTINCT TRIM(JUCEEN) AS SPEC
+
+        FROM SCDBFP10.USCLJUPF 
+
+        WHERE TRIM(JUCEEN) IN ({specs}) 
+    
+        UNION 
+
+        SELECT DISTINCT 
+        TRIM(JTFPAR) AS SPEC
+
+        FROM SCDBFP10.USCKJTPF 
+        
+        WHERE JTFTYP IN ('PRNT', 'MSTR') 
+        AND TRIM(JTFPAR) IN ({specs}) 
+    '''
+
+
+def alaska_customer_cleanup(active_specs, account_ties):
+    return f'''
+        BEGIN TRANSACTION
+
+            DELETE 
+            
+            FROM Alaska_Customer_Eligibility
+            
+            WHERE SPEC NOT IN ({active_specs})
+            AND TIMESTAMP = '{timestamp}'
+
+            DELETE 
+            
+            FROM Alaska_Customer_Eligibility
+            
+            WHERE VA NOT IN (
+                SELECT VA 
+
+                FROM Alaska_Customer_Eligibility
+
+                WHERE SPEC IN ({account_ties})
+                AND VA <> '0'
+            )
+            AND CA NOT IN (
+                SELECT CA 
+                
+                FROM Alaska_Customer_Eligibility
+
+                WHERE SPEC IN ({account_ties})
+                AND CA <> '0'
+            )
+            AND TIMESTAMP = '{timestamp}'
+
+        COMMIT
+    '''
+
+
+def alaska_item_cleanup(items):
+    return f'''
+    BEGIN TRANSACTION
+
+        DELETE 
+
+        FROM Alaska_Item_Eligibility
+
+        WHERE ITEM NOT IN ({items})
+        AND TIMESTAMP = '{timestamp}'
+
+        DELETE T1 
+
+        FROM Alaska_Customer_Eligibility AS T1
+
+        LEFT JOIN Alaska_Item_Eligibility AS T2
+        ON T1.VA = T2.VA 
+        AND T1.CA = T2.CA
+
+        WHERE T2.PRIMARY_KEY IS NULL
+
+    COMMIT
+    '''
+
+
+def dpm_agreement_header(va, ca):
+    return f'''
+        SELECT DISTINCT
+        CAST(M7VAGN AS VARCHAR(11)) AS LEAD_VA, 
+        CAST(M7ACAN AS VARCHAR(11)) AS LEAD_CA, 
+        M7AGTY AS VA_TYPE,
+        TRIM(M7VNBR) AS VENDOR_NBR, 
+        TRIM(M7VAGD) AS DESCRIPTION, 
+        TRIM(M7PDDD) AS PAST_DUE_DEDUCT, 
+        IFNULL(NHAGTY, '') AS CA_TYPE,  
+        IFNULL(NHAGTP, '') AS REBATE_TYPE, 
+        M7COSP AS COST_BASIS, 
+        'F' AS ALASKA_COST_BASIS, 
+        LEFT(RIGHT(M7VASD,4),2) || RIGHT(M7VASD,2) || RIGHT(LEFT(M7VASD,4),2) AS START_DT, 
+        LEFT(RIGHT(M7VAED,4),2) || RIGHT(M7VAED,2) || RIGHT(LEFT(M7VAED,4),2) AS END_DT,
+        M7FRQC AS BILLING_FREQ, 
+        CAST(M7DYNO AS VARCHAR(5)) AS BILLING_DAY, 
+        M7DOW AS BILLING_DOW, 
+        M7BBKF AS BILLBACK_FORMAT, 
+        TRIM(M7VPAN) AS PRE_APPROVAL,
+        M7COCM AS CORP_CLAIMED, 
+        TRIM(M7APNM) AS APPROP_NAME,
+        '{timestamp}' AS TIMESTAMP, 
+        '' AS ALASKA_VA,
+        '' AS ALASKA_CA,
+        CASE WHEN DVT500 LIKE '%055%' THEN 'YES' ELSE 'NO' END AS SEATTLE_DIST,
+        'NEW' AS CHANGE_CODE
+
+        FROM SCDBFP10.PMVHM7PF
+
+        LEFT JOIN SCDBFP10.PMPVNHPF
+        ON M7ACAN = NHCANO
+        AND M7ACAN <> 0
+
+        LEFT JOIN SCDBFP10.PMDPDVRF
+        ON CAST(M7VAGN AS VARCHAR(11)) = TRIM(DVCPM9)
+        AND TRIM(DVCPTY) = 'VA'
+
+        WHERE M7VAGN IN ({va})
+
+        UNION
+
+        SELECT DISTINCT 
+        '0' AS LEAD_VA, 
+        CAST(NHCANO AS VARCHAR(11)) AS LEAD_CA, 
+        '' AS VA_TYPE,
+        '' AS VENDOR_NBR, 
+        TRIM(NHCADC) AS DESCRIPTION, 
+        '' AS PAST_DUE_DEDUCT, 
+        NHAGTY AS CA_TYPE,  
+        NHAGTP AS REBATE_TYPE, 
+        NHCOBS AS COST_BASIS, 
+        'F' AS ALASKA_COST_BASIS, 
+        LEFT(RIGHT(NHCASD,4),2) || RIGHT(NHCASD,2) || RIGHT(LEFT(NHCASD,4),2) AS START_DT, 
+        LEFT(RIGHT(NHCAED,4),2) || RIGHT(NHCAED,2) || RIGHT(LEFT(NHCAED,4),2) AS END_DT,
+        NHFRQC AS BILLING_FREQ, 
+        CAST(NHDYNO AS VARCHAR(5)) AS BILLING_DAY, 
+        NHDOW AS BILLING_DOW, 
+        '' AS BILLBACK_FORMAT, 
+        '' AS PRE_APPROVAL,
+        '' AS CORP_CLAIMED, 
+        TRIM(NHAPNM) AS APPROP_NAME,
+        '{timestamp}' AS TIMESTAMP,
+        '' AS ALASKA_VA,
+        '' AS ALASKA_CA,
+        CASE WHEN DVT500 LIKE '%055%' THEN 'YES' ELSE 'NO' END AS SEATTLE_DIST,
+        'NEW' AS CHANGE_CODE
+
+        FROM SCDBFP10.PMPVNHPF
+
+        LEFT JOIN SCDBFP10.PMDPDVRF
+        ON CAST(NHCANO AS VARCHAR(11)) = TRIM(DVCPM9)
+        AND TRIM(DVCPTY) <> 'VA'
+
+        WHERE NHCANO IN ({ca})
+    '''
+
+
+def dgd_agreement_header(va, ca):
+    return f'''
+        SELECT DISTINCT
+        CAST(M7VAGN AS VARCHAR(11)) AS LEAD_VA, 
+        CAST(M7ACAN AS VARCHAR(11)) AS LEAD_CA, 
+        M7AGTY AS VA_TYPE,
+        TRIM(M7VNBR) AS VENDOR_NBR, 
+        TRIM(M7VAGD) AS DESCRIPTION, 
+        TRIM(M7PDDD) AS PAST_DUE_DEDUCT, 
+        IFNULL(NHAGTY, '') AS CA_TYPE,  
+        IFNULL(NHAGTP, '') AS REBATE_TYPE, 
+        M7COSP AS COST_BASIS, 
+        'F' AS ALASKA_COST_BASIS, 
+        LEFT(RIGHT(M7VASD,4),2) || RIGHT(M7VASD,2) || RIGHT(LEFT(M7VASD,4),2) AS START_DT, 
+        LEFT(RIGHT(M7VAED,4),2) || RIGHT(M7VAED,2) || RIGHT(LEFT(M7VAED,4),2) AS END_DT,
+        M7FRQC AS BILLING_FREQ, 
+        CAST(M7DYNO AS VARCHAR(5)) AS BILLING_DAY, 
+        M7DOW AS BILLING_DOW, 
+        M7BBKF AS BILLBACK_FORMAT, 
+        TRIM(M7VPAN) AS PRE_APPROVAL,
+        M7COCM AS CORP_CLAIMED, 
+        TRIM(M7APNM) AS APPROP_NAME,
+        '{timestamp}' AS TIMESTAMP, 
+        '' AS ALASKA_VA,
+        '' AS ALASKA_CA,
+        'YES' AS SEATTLE_DIST,
+        'NEW' AS CHANGE_CODE
+
+        FROM SCDBFP10.PMVHM7PF
+
+        LEFT JOIN SCDBFP10.PMPVNHPF
+        ON M7ACAN = NHCANO
+        AND M7ACAN <> 0
+
+        WHERE M7VAGN IN ({va})
+
+        UNION
+
+        SELECT DISTINCT 
+        '0' AS LEAD_VA, 
+        CAST(NHCANO AS VARCHAR(11)) AS LEAD_CA, 
+        '' AS VA_TYPE,
+        '' AS VENDOR_NBR, 
+        TRIM(NHCADC) AS DESCRIPTION, 
+        '' AS PAST_DUE_DEDUCT, 
+        NHAGTY AS CA_TYPE,  
+        NHAGTP AS REBATE_TYPE, 
+        NHCOBS AS COST_BASIS, 
+        'F' AS ALASKA_COST_BASIS, 
+        LEFT(RIGHT(NHCASD,4),2) || RIGHT(NHCASD,2) || RIGHT(LEFT(NHCASD,4),2) AS START_DT, 
+        LEFT(RIGHT(NHCAED,4),2) || RIGHT(NHCAED,2) || RIGHT(LEFT(NHCAED,4),2) AS END_DT,
+        NHFRQC AS BILLING_FREQ, 
+        CAST(NHDYNO AS VARCHAR(5)) AS BILLING_DAY, 
+        NHDOW AS BILLING_DOW, 
+        '' AS BILLBACK_FORMAT, 
+        '' AS PRE_APPROVAL,
+        '' AS CORP_CLAIMED, 
+        TRIM(NHAPNM) AS APPROP_NAME,
+        '{timestamp}' AS TIMESTAMP,
+        '' AS ALASKA_VA,
+        '' AS ALASKA_CA,
+        'YES' AS SEATTLE_DIST,
+        'NEW' AS CHANGE_CODE
+
+        FROM SCDBFP10.PMPVNHPF
+
+        WHERE NHCANO IN ({ca})
+    '''
+
+def usbl_agreement_item(va, ca):
+    return f'''
+        SELECT 
+        CAST(M7VAGN AS VARCHAR(11)) AS LEAD_VA, 
+        CAST(M7ACAN AS VARCHAR(11)) AS LEAD_CA, 
+        TRIM(QBITEM) AS ITEM, 
+        QBXVBS AS VA_REBATE_BASIS,
+        CAST(CAST(ROUND(QBXVRB,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS VA_REBATE_AMT, 
+        CAST(CAST(ROUND(QBXVRB,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS VA_ALASKA_REBATE_AMT, 
+        CASE WHEN QBXVAV = 1 AND LEFT(QBXVBS,1) <> 'D' THEN '100' ELSE CAST(CAST(ROUND(QBXVAV,3) AS DECIMAL(10,3)) AS VARCHAR(11)) END AS VA_APPROP_AMT, 
+        QXACBS AS CA_REBATE_BASIS,
+        CAST(CAST(ROUND(QXXAMT,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS CA_ALLOWANCE, 
+        CAST(CAST(ROUND(QXCBAJ,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS CA_COMM_BASE,
+        CAST(CAST(ROUND(QXAPAJ,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS CA_ADJ_AP, 
+        CAST(CAST(ROUND(QXAPAJ,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS CA_ALASKA_ADJ_AP, 
+        '{timestamp}' AS TIMESTAMP,
+        '' AS SOURCE_VNDR
+
+        FROM SCDBFP10.PMVHM7PF
+
+        INNER JOIN SCDBFP10.PMPZQBPF
+        ON M7VAGN = QBVAGN
+
+        INNER JOIN SCDBFP10.PMPZQXPF
+        ON M7ACAN = QXCANO
+        AND QBITEM = QXITEM
+        AND M7ACAN <> 0 
+
+        WHERE M7VAGN IN ({va})
+
+        UNION
+
+        SELECT 
+        CAST(M7VAGN AS VARCHAR(11)) AS LEAD_VA, 
+        '0' AS LEAD_CA, 
+        TRIM(QBITEM) AS ITEM, 
+        QBXVBS AS VA_REBATE_BASIS,
+        CAST(CAST(ROUND(QBXVRB,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS VA_REBATE_AMT, 
+        CAST(CAST(ROUND(QBXVRB,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS VA_ALASKA_REBATE_AMT, 
+        CASE WHEN QBXVAV = 1 AND LEFT(QBXVBS,1) <> 'D' THEN '100' ELSE CAST(CAST(ROUND(QBXVAV,3) AS DECIMAL(10,3)) AS VARCHAR(11)) END AS VA_APPROP_AMT, 
+        '' AS CA_REBATE_BASIS,
+        '' AS CA_ALLOWANCE, 
+        '' AS CA_COMM_BASE,
+        '' AS CA_ADJ_AP, 
+        '' AS CA_ALASKA_ADJ_AP, 
+        '{timestamp}' AS TIMESTAMP,
+        '' AS SOURCE_VNDR
+
+        FROM SCDBFP10.PMVHM7PF
+
+        INNER JOIN SCDBFP10.PMPZQBPF
+        ON M7VAGN = QBVAGN
+
+        WHERE M7VAGN IN ({va})
+        AND M7ACAN = 0
+
+        UNION
+
+        SELECT 
+        '0' AS LEAD_VA, 
+        CAST(NHCANO AS VARCHAR(11)) AS LEAD_CA, 
+        TRIM(QXITEM) AS ITEM, 
+        '' AS VA_REBATE_BASIS,
+        '' AS VA_REBATE_AMT, 
+        '' AS VA_ALASKA_REBATE_AMT, 
+        '' AS VA_APPROP_AMT, 
+        QXACBS AS CA_REBATE_BASIS,
+        CAST(CAST(ROUND(QXXAMT,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS CA_ALLOWANCE, 
+        CAST(CAST(ROUND(QXCBAJ,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS CA_COMM_BASE,
+        CAST(CAST(ROUND(QXAPAJ,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS CA_ADJ_AP, 
+        CAST(CAST(ROUND(QXAPAJ,3) AS DECIMAL(10,3)) AS VARCHAR(11)) AS CA_ALASKA_ADJ_AP, 
+        '{timestamp}' AS TIMESTAMP,
+        '' AS SOURCE_VNDR
+
+        FROM SCDBFP10.PMPVNHPF
+
+        INNER JOIN SCDBFP10.PMPZQXPF
+        ON NHCANO = QXCANO
+
+        WHERE NHCANO IN ({ca})
+    '''
+
+def valid_alaska_items(items):
+    return f'''
+        SELECT DISTINCT 
+        TRIM(JFITEM) AS ITEM, 
+        TRIM(MQPVSF) AS SOURCE_VNDR
+
+        FROM SCDBFP10.USIAJFPF 
+
+        LEFT JOIN SCDBFP10.USIAMQRF 
+        ON JFITEM = MQITEM
+
+        WHERE TRIM(JFITEM) IN ({items}) 
+    '''

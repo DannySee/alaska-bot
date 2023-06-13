@@ -1,11 +1,5 @@
 import pyodbc
 
-# sql server connection properties
-sql_server = pyodbc.connect(
-    driver='{SQL Server}',
-    server='MS248CSSQL01.SYSCO.NET',
-    database='Pricing_Agreements')
-
 # dictionary of all opsites 3 (key=3 digit number, value=3 digit number + name)
 site_names = {
     '001': '001 - Jackson',
@@ -115,3 +109,12 @@ def sus(site):
 
     return cnn_sus
 
+
+# sql server connection properties
+def sql_server():
+    server = pyodbc.connect(
+        driver='{SQL Server}',
+        server='MS248CSSQL01.SYSCO.NET',
+        database='Pricing_Agreements')
+    
+    return server

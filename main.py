@@ -1,4 +1,5 @@
 import session_manager as bz
+import digital_deals as dgd
 
 from data_pull import upload_alaska_deviations, deviation_details, insert_alaska_agreements, get_updated_agreements, update_term_dates
 from outlook import send_vadam_request
@@ -93,11 +94,12 @@ def load_customer_agreement(header, item_elig, customer_elig):
     return {'VA':'0', 'CA':ca}
 
 
-def load_alaska_agreements():   
+def load_alaska_agreements(deviations):   
 
     # load list of alaska deviations 
-    #deviations = upload_alaska_deviations()
-    deviations = deviation_details()
+    # deviations = upload_alaska_deviations()
+    #deviations.update(dgd.upload_alaska_deviations())
+    #deviations = deviation_details()
     all_header = deviations['header']
     all_item_elig = deviations['item_eligibility']
     all_customer_elig = deviations['customer_eligibility']
@@ -148,7 +150,14 @@ def update_alaska_agreements():
 if __name__ == "__main__":
 
     # load new agreements keyed yesterday by DPM
-    agreements = load_alaska_agreements()
+    deviations = upload_alaska_deviations()
+    agreements = load_alaska_agreements(deviations)
+
+    try:
+        deviations = dgd.upload_alaska_deviations()
+        agreements = load_alaska_agreements(deviations)
+    except Exception as e:
+        print(f'could not process digital deals\n{e}')
 
     # update alaska agreements to align with an updated lead agreement
     update_alaska_agreements()
@@ -166,9 +175,7 @@ the timestamp and change code of updated agreements. That way,
 the query can just handle new and updated agreements accordingly
 create dictionary of actions with 'NEW' and 'CHANGE' as the keys 
 including subsequent dictionaries 
-'''
 
-'''
 I have ending vendor agreements configured, but not customer agreements
 and not voids
 '''

@@ -2,7 +2,8 @@ import data_centers as db
 from datetime import datetime, timedelta, date
 
 # define formatted date parameters: yesterday = sus format, today = timestamp format
-today = datetime.now().strftime('%Y-%m-%d')
+timestamp = datetime.now().strftime('%Y-%m-%d')
+today = datetime.now().strftime('%Y%m%d')
 yesterday = (datetime.now() - timedelta(1)).strftime('%Y%m%d')
 
 
@@ -32,7 +33,7 @@ def lead_agreements_created_yesterday():
         ON RIGHT('000' || M7VAGN, 9) = AZCEEN 
         AND AZCEAI = 'VA ' 
 
-        WHERE M7EADT > 20230401
+        WHERE M7EADT = {yesterday}
         AND M7ACAN = 0
         AND M7VAGD NOT LIKE '%VOID%' 
         AND M7AGRN = 999999999
@@ -61,7 +62,7 @@ def lead_agreements_created_yesterday():
         AND T2.AZCEAI = 'VA ' 
         AND T1.AZPCSP = T2.AZPCSP
 
-        WHERE M7EADT > 20230401
+        WHERE M7EADT = {yesterday}
         AND M7ACAN <> 0
         AND M7VAGD NOT LIKE '%VOID%' 
         AND M7AGRN = 999999999
@@ -605,7 +606,7 @@ def deviation_details():
     # query all agreement header details and assign to dataset variable
     header = db.sql_server.execute(f'''
         SELECT * FROM Alaska_Header
-        WHERE TIMESTAMP = '{today}' 
+        WHERE (TIMESTAMP = '{today}' AND ALASKA_VA = '' AND ALASKA_CA = '')
         OR (
             ALASKA_VA IN ('VA10023', 'VA10024')
             AND DATEFROMPARTS('20' + RIGHT(END_DT,2), LEFT(END_DT,2), RIGHT(LEFT(END_DT,4),2)) >= '{now}'
@@ -1011,11 +1012,11 @@ def upload_alaska_deviations():
     #clear_zoned_agreements()
 
     # get dictionary of agreement criteria for return. dictionary to include agreement header, item, and customer detail
-    #deviations = deviation_details()
+    deviations = deviation_details()
 
     # print successful message and return dictionary
-    print('upload complete')
-    return
+    print('DGD upload complete')
+    return deviations
     #except:
 
         # clear datase of partial records. the reason for this exception is that all deviations loaded 
@@ -1048,147 +1049,6 @@ def get_updated_agreements():
         compiled_updates[va][field] = value
 
     return compiled_updates
-
-
-
-def correct_spec_code():
-
-    excludes = db.sql_server.execute(f'''
-        SELECT 
-        CONCAT(VA,CA) AS AGMT,
-        SPEC
-
-        FROM ALASKA_CUSTOMER_ELIGIBILITY
-
-        WHERE TIMESTAMP = '{today}' 
-        AND IEA = 'E'
-    ''').fetchall()
-
-    agreement_elig = {}
-    for exclude in excludes:
-        if exclude.AGMT not in agreement_elig: agreement_elig[exclude.AGMT] = {'E': [], 'U': []}
-        agreement_elig[exclude.AGMT]['E'].append(exclude.SPEC)
-
-    subscriptions = db.sql_server.execute(f'''
-        SELECT 
-        CONCAT(VA,CA) AS AGMT,  
-        SPEC
-
-        FROM ALASKA_CUSTOMER_ELIGIBILITY
-
-        WHERE TIMESTAMP = '{today}' 
-        AND IEA = 'U'
-    ''').fetchall()
-
-    for subscription in subscriptions:
-        agreement_elig[subscription.AGMT]['U'].append(subscription.SPEC)
-
-    sus = db.sus('450')
-
-    for agreement in agreement_elig:
-
-        print(f'va: {agreement}')
-
-        exclude = "'" + "','".join(str(row) for row in agreement_elig[agreement]['E']) + "'"
-
-        print(f'exclude: {exclude}')
-
-        excluded_customers = sus.execute(f'''
-            SELECT DISTINCT TRIM(AZPCSP) AS CST
-
-            FROM SCDBFP10.USCNAZL0 
-
-            WHERE TRIM(AZCEEN) IN ({exclude}) 
-            AND AZEFED >= 20230430
-            AND AZCEAI = 'GRP' 
-        
-            UNION 
-
-            SELECT DISTINCT TRIM(JTFPAR) AS CST
-
-            FROM SCDBFP10.USCKJTPF
-
-            WHERE TRIM(JTHIMA) IN ({exclude})
-            AND JTTTYP = 'PRNT'
-            AND JTFTYP NOT IN ('PRNT','MSTR')
-            AND JTTEDT >= 20230430
-
-            UNION 
-
-            SELECT DISTINCT TRIM(JTFPAR) AS CST
-
-            FROM SCDBFP10.USCKJTPF
-
-            WHERE TRIM(JTTPAR) IN ({exclude})
-            AND JTTTYP = 'PRNT'
-            AND JTFTYP NOT IN ('PRNT','MSTR')
-            AND JTTEDT >= 20230430
-        ''').fetchall()
-
-        exclude_list = [str(row.CST) for row in excluded_customers]
-
-        print(f'exclude list: {exclude_list}')
-
-        subscribed = "'" + "','".join(str(row) for row in agreement_elig[agreement]['U']) + "'"
-
-        print(f'subscribed: {subscribed}')
-
-        subscribed_customers = sus.execute(f'''
-            SELECT DISTINCT TRIM(AZPCSP) AS SHP, TRIM(AZCEEN) AS SPEC
-
-            FROM SCDBFP10.USCNAZL0 
-
-            WHERE TRIM(AZCEEN) IN ({subscribed}) 
-            AND AZEFED >= 20230430
-            AND AZCEAI = 'GRP' 
-        
-            UNION 
-
-            SELECT DISTINCT TRIM(JTFPAR) AS SHP, TRIM(JTHIMA) AS SPEC
-
-            FROM SCDBFP10.USCKJTPF
-
-            WHERE TRIM(JTHIMA) IN ({subscribed})
-            AND JTTTYP = 'PRNT'
-            AND JTFTYP NOT IN ('PRNT','MSTR')
-            AND JTTEDT >= 20230430
-
-            UNION 
-
-            SELECT DISTINCT TRIM(JTFPAR) AS SHP, TRIM(JTTPAR) AS SPEC
-
-            FROM SCDBFP10.USCKJTPF
-
-            WHERE TRIM(JTTPAR) IN ({subscribed})
-            AND JTTTYP = 'PRNT'
-            AND JTFTYP NOT IN ('PRNT','MSTR')
-            AND JTTEDT >= 20230430
-        ''').fetchall()
-
-        for customer in subscribed_customers:
-
-            print(f'SUBSPEC: {customer.SHP}')
-
-            if customer.SHP in exclude_list: 
-                db.sql_server.execute(F'''
-                    UPDATE ALASKA_CUSTOMER_ELIGIBILITY 
-                    SET IEA = 'I'
-                    WHERE CONCAT(VA, CA) = '{agreement}'
-                    AND TIMESTAMP = '{today}'
-                    AND SPEC = '{customer.SPEC}'
-                ''')
-        
-        db.sql_server.execute(F'''
-            UPDATE ALASKA_CUSTOMER_ELIGIBILITY 
-            SET IEA = 'A'
-            WHERE CONCAT(VA, CA) = '{agreement}'
-            AND TIMESTAMP = '{today}'
-            AND SPEC_CODE = 'U'
-        ''')
-    
-    db.sql_server.commit()
-
-
 
 
 
