@@ -115,6 +115,7 @@ def sql_server():
     server = pyodbc.connect(
         driver='{SQL Server}',
         server='MS248CSSQL01.SYSCO.NET',
-        database='Pricing_Agreements')
+        database='Pricing_Agreements',
+        autocommit=True)
     
     return server

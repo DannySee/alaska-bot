@@ -94,12 +94,10 @@ def load_customer_agreement(header, item_elig, customer_elig):
     return {'VA':'0', 'CA':ca}
 
 
-def load_alaska_agreements(deviations):   
+def load_alaska_agreements():   
 
     # load list of alaska deviations 
-    # deviations = upload_alaska_deviations()
-    #deviations.update(dgd.upload_alaska_deviations())
-    #deviations = deviation_details()
+    deviations = upload_alaska_deviations()
     all_header = deviations['header']
     all_item_elig = deviations['item_eligibility']
     all_customer_elig = deviations['customer_eligibility']
@@ -150,23 +148,26 @@ def update_alaska_agreements():
 if __name__ == "__main__":
 
     # load new agreements keyed yesterday by DPM
-    deviations = upload_alaska_deviations()
-    agreements = load_alaska_agreements(deviations)
-
     try:
-        deviations = dgd.upload_alaska_deviations()
-        agreements = load_alaska_agreements(deviations)
+        load_alaska_agreements()
     except Exception as e:
-        print(f'could not process digital deals\n{e}')
+        print(f'Could not process all new agreements - check job:\n{e}')
 
     # update alaska agreements to align with an updated lead agreement
-    update_alaska_agreements()
+    try:
+        update_alaska_agreements()
+    except Exception as e:
+        print(f'Could not process all agreement updates - check job:\n{e}')
 
     # close bluezone sessioon
     bz.disconnect(session)
 
     # send all vadam tie requests to west market field
-    send_vadam_request(database_query(sql.get_vendor_errors))
+    try:
+        send_vadam_request(database_query(sql.get_vendor_errors))
+    except Exception as e:
+        print(f'Could not send VADAM request - check job:\n{e}')
+
 
 
 '''

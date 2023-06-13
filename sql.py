@@ -371,6 +371,60 @@ get_active_agreements = f'''
     AND ALASKA_VA NOT IN ('', 'VA10023', 'VA10024')
 '''
 
+# update source vendor in item table from item source table
+update_item_sourcing = f'''
+    UPDATE T1
+
+    SET T1.SOURCE_VNDR = T2.SOURCE_VNDR
+    
+    FROM Alaska_Item_Eligibility AS T1
+
+    INNER JOIN Item_Source_Vendor AS T2
+    ON T1.ITEM = T2.ITEM
+
+    WHERE T1.TIMESTAMP = '{timestamp}'
+'''
+
+# get items sourced from seattle (vendor 4274)
+seattle_sourced_items = f'''
+    SELECT DISTINCT ITEM
+
+    FROM Alaska_Item_Eligibility
+
+    WHERE SOURCE_VNDR = '4274'
+    AND TIMESTAMP = '{timestamp}'
+'''
+
+# get agreement header details
+alaska_header_detail = f'''
+    SELECT * 
+    FROM Alaska_Header
+    WHERE TIMESTAMP = '{timestamp}' 
+    OR (
+        ALASKA_VA IN ('VA10023', 'VA10024')
+        AND DATEFROMPARTS('20' + RIGHT(END_DT,2), LEFT(END_DT,2), RIGHT(LEFT(END_DT,4),2)) >= '{timestamp}'
+    )
+    ORDER BY VA, CA
+'''
+
+
+# get agreement customer eligibility details for one agreement
+def alaska_customer_detail(agreement):
+    return f'''
+        SELECT * FROM Alaska_customer_Eligibility
+        WHERE CONCAT(VA,CA) = '{agreement}' 
+        ORDER BY SPEC
+    '''
+
+
+# get agreement item eligibility details for one agreement
+def alaska_item_detail(agreement):
+    return f'''
+        SELECT * FROM Alaska_Item_Eligibility
+        WHERE CONCAT(VA,CA) = '{agreement}' 
+        ORDER BY ITEM
+    '''
+
 
 # get vendor agreements updated day prior 
 def agreements_updated_yesterday(agreements, originator):
@@ -812,7 +866,7 @@ def log_alaska_agreement(primary_key, va, ca):
         UPDATE Alaska_Header 
         SET ALASKA_VA = '{va}', 
         ALASKA_CA = '{ca}' 
-        WHERE PRIMARY_KEY = {primary_key}'
+        WHERE PRIMARY_KEY = {primary_key}
     '''
 
 

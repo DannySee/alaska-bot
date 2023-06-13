@@ -23,7 +23,7 @@ def usbl_agreements_created_yesterday():
 def insert_into_sql_server(dataset, table):
 
     # establish connection to sql server
-    sql_server =- db.sql_server()
+    sql_server = db.sql_server()
 
     # sql server has an insert row max of 1000 records - handle differently depending on size of dataset
     row_count = len(dataset)
@@ -36,13 +36,11 @@ def insert_into_sql_server(dataset, table):
             rows = ','.join(str(row) for row in dataset[i:i+1000])
             sql_server.execute(f'INSERT INTO {table} VALUES{rows}')
             
-        sql_server.commit()
     elif row_count > 0:
 
         # format dataset, insert into sql server and commit
         rows = ','.join(str(row) for row in dataset)
         sql_server.execute(f'INSERT INTO {table} VALUES{rows}')
-        sql_server.commit()
 
     sql_server.close()
 
@@ -76,7 +74,7 @@ def alaska_accounts(dataset):
 def delete_agreements_without_customers(dataset):
 
     # establish connection to sql server
-    sql_server =- db.sql_server()
+    sql_server = db.sql_server()
 
     # format string of customer specs which do have ties in alaska
     account_ties = "'" + "','".join(str(row.SPEC) for row in dataset['account_ties']) + "'"
@@ -84,7 +82,6 @@ def delete_agreements_without_customers(dataset):
 
     # delete all lead agreements where there are no customer specs with account ties in alaska 
     sql_server.execute(sql.alaska_customer_cleanup(active_specs, account_ties))
-    sql_server.commit()
 
     # get list of <relevent> vendor agreements (va <> 0) and create dictionary
     va = sql_server.execute(sql.agreement_numbers('Alaska_Customer_Eligibility', 'VA')).fetchall()
@@ -199,7 +196,6 @@ def delete_agreements_without_items(dataset):
 
     sql_server = db.sql_server()
     sql_server.execute(sql.alaska_item_cleanup(items))
-    sql_server.commit()
 
     # get list of vendor/customer agreement numbers from item table
     va = sql_server.execute(sql.agreement_numbers('Alaska_Item_Eligibility', 'VA')).fetchall()
@@ -227,13 +223,16 @@ def deviation_details():
     customer_eligibility = {}
     for component in header:
 
+        # key is concatenation of vendor and customer agreement
+        key = component.VA + component.CA
+
         # get all agreement item/customer eligibility details 
-        items = sql_server.execute(sql.alaska_item_detail).fetchall()
-        customers = sql_server.execute(sql.alaska_customer_detail).fetchall()
+        items = sql_server.execute(sql.alaska_item_detail(key)).fetchall()
+        customers = sql_server.execute(sql.alaska_customer_detail(key)).fetchall()
 
         # add agreement records to dictionary 
-        item_eligibility[component.VA + component.CA] = items
-        customer_eligibility[component.VA + component.CA] = customers
+        item_eligibility[key] = items
+        customer_eligibility[key] = customers
 
     # assemble dictionary of all agreement information 
     deviations = {
@@ -254,7 +253,6 @@ def update_source_vendor():
 
     # update source vendor number in sql server by item
     sql_server.execute(sql.update_item_sourcing)
-    sql_server.commit()
 
     # get list of items sourced from seattle
     seattle_items = sql_server.execute(sql.seattle_sourced_items).fetchall()
@@ -270,11 +268,11 @@ def database_command(command):
 
     # loop through and execute list of commands or execute single command
     if type(command) is list:
-        [sql_server.execute(query) for query in command]
+        for query in command:
+            sql_server.execute(query)  
     else:
         sql_server.execute(command)
 
-    sql_server.commit()
     sql_server.close()
 
 # execute a query to sql server database - return results
@@ -312,8 +310,7 @@ def clear_zoned_agreements():
         # remove all zoned agreements from database
         zoned = "'" + "','".join(str(row.ZONED) for row in zoned_agreements) + "'"
         sql_server.execute(sql.delete_zoned_agreements(zoned))
-        sql_server.commit()
-
+   
     sql_server.close()
 
 
@@ -463,9 +460,9 @@ def upload_alaska_deviations():
     # print staus message and clean tables (item/customer) if there are no alaska devitions to create
     record_count = len(deviations['header'])
     if record_count > 0:
-        database_command(sql.database_cleanup)
         print(f'upload complete: {record_count} deviations')
     else:
+        database_command(sql.database_cleanup)
         print('upload complete: no deviations')
 
     return deviations
