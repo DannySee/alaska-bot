@@ -8,6 +8,7 @@ from outlook import send_vadam_request
 session = bz.connect()
 
 
+# load vendor/customer agreement and return va/ca number
 def load_vendor_agreement(header, item_elig, customer_elig):
 
     # go to quick access va
@@ -59,6 +60,7 @@ def load_vendor_agreement(header, item_elig, customer_elig):
     return {'VA':va, 'CA':ca}
 
 
+# load customer agreement and return ca number
 def load_customer_agreement(header, item_elig, customer_elig):
 
     # go to quick access va
@@ -94,6 +96,7 @@ def load_customer_agreement(header, item_elig, customer_elig):
     return {'VA':'0', 'CA':ca}
 
 
+# load deviated agreement in alaska and return list of agreements
 def load_alaska_agreements():   
 
     # load list of alaska deviations 
@@ -129,12 +132,16 @@ def load_alaska_agreements():
     return agreements
 
 
+# update existing bot-created agreement based on lead agreement update
 def update_alaska_agreements():
 
+    # go to quick access va
     bz.quick_access_va(session)
 
+    # get list of all active agreements that have been updated
     updates = get_updated_agreements()
     
+    # update alaska agreement based on update for lead agreement
     for update in updates:
 
         # voids
@@ -167,17 +174,3 @@ if __name__ == "__main__":
         send_vadam_request(database_query(sql.get_vendor_errors))
     except Exception as e:
         print(f'Could not send VADAM request - check job:\n{e}')
-
-
-
-'''
-i want to change the upload_alaska_agreements() function to also update 
-the timestamp and change code of updated agreements. That way, 
-the query can just handle new and updated agreements accordingly
-create dictionary of actions with 'NEW' and 'CHANGE' as the keys 
-including subsequent dictionaries 
-
-I have ending vendor agreements configured, but not customer agreements
-and not voids
-'''
-
