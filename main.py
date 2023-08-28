@@ -1,11 +1,10 @@
 import session_manager as bz
+import logging
 
 from data_pull import deviation_details, upload_alaska_deviations, insert_alaska_agreements, get_updated_agreements, update_term_dates
 from outlook import send_vadam_request
 
-# open a global bluezone session
 session = bz.connect()
-
 
 def load_vendor_agreement(header, item_elig, customer_elig):
 
@@ -96,8 +95,8 @@ def load_customer_agreement(header, item_elig, customer_elig):
 def load_alaska_agreements():   
 
     # load list of alaska deviations 
-    #deviations = deviation_details()
-    deviations = upload_alaska_deviations()
+    deviations = deviation_details()
+    #deviations = upload_alaska_deviations()
     all_header = deviations['header']
     all_item_elig = deviations['item_eligibility']
     all_customer_elig = deviations['customer_eligibility']

@@ -32,7 +32,7 @@ def lead_agreements_created_yesterday():
         ON RIGHT('000' || M7VAGN, 9) = AZCEEN 
         AND AZCEAI = 'VA ' 
 
-        WHERE M7EADT = {yesterday}
+        WHERE M7EADT between 20230526 and {yesterday}
         AND M7ACAN = 0
         AND M7VAGD NOT LIKE '%VOID%' 
         AND M7AGRN = 999999999
@@ -61,7 +61,7 @@ def lead_agreements_created_yesterday():
         AND T2.AZCEAI = 'VA ' 
         AND T1.AZPCSP = T2.AZPCSP
 
-        WHERE M7EADT = {yesterday}
+        WHERE M7EADT between 20230526 and {yesterday}
         AND M7ACAN <> 0
         AND M7VAGD NOT LIKE '%VOID%' 
         AND M7AGRN = 999999999
@@ -1048,3 +1048,4 @@ def get_updated_agreements():
         compiled_updates[va][field] = value
 
     return compiled_updates
+

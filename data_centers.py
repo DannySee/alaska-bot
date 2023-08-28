@@ -188,7 +188,7 @@ def sus(site):
         driver='{iSeries Access ODBC Driver}',
         system=f'AS{site}ATO.na.sysco.net',
         UID='MUDAC000',
-        PWD='ZXCVBN4567',
+        PWD='asdfgh9874',
         TRANSLATE=1,
         TRANSLATE_BINARY=True)
 

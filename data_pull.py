@@ -38,7 +38,7 @@ def lead_agreements_created_yesterday():
         ON CAST(M7VAGN AS VARCHAR(11)) = TRIM(DVCPM9)
         AND TRIM(DVCPTY) = 'VA'
 
-        WHERE M7EADT = {yesterday}
+        WHERE M7EADT between 20230526 and {yesterday}
         AND M7ACAN = 0
         AND M7PPAF = 'PD'
         AND M7AGTY <> 'NGEL'
@@ -79,7 +79,7 @@ def lead_agreements_created_yesterday():
         ON CAST(M7VAGN AS VARCHAR(11)) = TRIM(DVCPM9)
         AND TRIM(DVCPTY) = 'VA'
 
-        WHERE M7EADT = {yesterday}
+        WHERE M7EADT between 20230526 and {yesterday}
         AND M7ACAN <> 0
         AND M7PPAF = 'PD'
         AND M7AGTY <> 'NGEL'
@@ -114,7 +114,7 @@ def lead_agreements_created_yesterday():
         ON CAST(NHCANO AS VARCHAR(11)) = TRIM(DVCPM9)
         AND TRIM(DVCPTY) = 'CA'
 
-        WHERE NHEADT = {yesterday}
+        WHERE NHEADT between 20230526 and {yesterday}
         AND NHCVAN = 0
         AND NHPPAF = 'PD'
         AND NHAGTY <> 'NGEL'
@@ -1149,9 +1149,6 @@ def upload_alaska_deviations():
 
     # remove zoned agreements where seattle is not in distribution list
     clear_zoned_agreements()
-
-    # upload digital deals
-    dgd.upload_digital_deals()
 
     # get dictionary of agreement criteria for return. dictionary to include agreement header, item, and customer detail
     deviations = deviation_details()
